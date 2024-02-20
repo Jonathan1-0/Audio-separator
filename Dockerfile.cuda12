@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
 
 RUN python3 -m pip install --upgrade pip
 
-# Install the CUDA 12 compatible version of ONNXRuntime
+# Install the CUDA 12 compatible version of ONNXRuntime (the default CUDA version for ORT is still 11.8 so they've provided a separate package index)
+# See https://onnxruntime.ai/docs/install/
 RUN pip install onnxruntime-gpu --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
 
 # Install audio-separator without any specific onnxruntime (onnxruntime should already be satisfied by the above)
