@@ -272,6 +272,37 @@ class ModalEngine:
         gpu = self.app_name.rsplit("-", 1)[-1].upper() if self.app_name.startswith("splitter-gpu-") else "GPU"
         return {"engine": "modal", "cuda": True, "device": f"NVIDIA {gpu} (Modal: {self.app_name})"}
 
+    def _events(self, audio: bytes, filename: str, preset: str):
+        """Los eventos de Modal, leídos desde otro hilo para poder dejar de esperar el primero.
+        Si Modal no tiene GPU, la llamada espera sin límite: su timeout solo cuenta la ejecución."""
+        import queue
+
+        events: "queue.Queue" = queue.Queue()
+
+        def pump() -> None:
+            try:
+                for ev in self._cls().separate.remote_gen(audio, filename, preset):
+                    events.put(ev)
+                events.put(None)
+            except BaseException as exc:  # noqa: BLE001 - se relanza en el hilo del trabajo
+                events.put(exc)
+
+        threading.Thread(target=pump, name="modal-events", daemon=True).start()
+        wait = config.MODAL_START_MINUTES * 60 or None
+        while True:
+            try:
+                event = events.get(timeout=wait)
+            except queue.Empty:
+                # Ojo: la llamada sigue en la fila de Modal y puede ejecutarse (y cobrarse) después.
+                log.error("Modal %s (%s): sin GPU tras %s min", self.app_name, preset, config.MODAL_START_MINUTES)
+                raise SeparationError("No hay GPU disponible en este momento. Intenta de nuevo en unos minutos.") from None
+            wait = None  # ya arrancó: el resto lo limita el timeout de Modal
+            if event is None:
+                return
+            if isinstance(event, BaseException):
+                raise event
+            yield event
+
     def separate(self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb) -> Dict[str, Path]:
         import subprocess
 
@@ -283,7 +314,7 @@ class ModalEngine:
         bytes_received = 0
         started = time.perf_counter()
         try:
-            for event in self._cls().separate.remote_gen(audio, input_path.name, preset):
+            for event in self._events(audio, input_path.name, preset):
                 kind = event["type"]
                 if kind == "progress":
                     on_progress(event["value"] * self.SEPARATION_SHARE)
@@ -304,6 +335,8 @@ class ModalEngine:
                 flac.unlink()
                 result[stem] = wav
                 on_progress(self.SEPARATION_SHARE + (1 - self.SEPARATION_SHARE) * len(result) / n_stems)
+        except SeparationError:
+            raise
         except Exception as exc:
             # El error técnico queda en el log; la página recibe uno entendible.
             raise SeparationError(_friendly_modal_error(exc)) from exc

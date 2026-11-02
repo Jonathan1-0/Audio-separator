@@ -40,6 +40,8 @@ MAX_QUEUE = _int("SPLITTER_MAX_QUEUE", 20)
 ENGINE = os.getenv("SPLITTER_ENGINE", "modal").lower()
 # "splitter-gpu-l4" o "splitter-gpu-t4" (ver modal_app.py).
 MODAL_APP = os.getenv("SPLITTER_MODAL_APP", "splitter-gpu-l4")
+# Minutos que se espera a que Modal asigne una GPU antes de dar el trabajo por fallido. 0 = sin límite.
+MODAL_START_MINUTES = _int("SPLITTER_MODAL_START_MINUTES", 5)
 
 # CORS. En producción, el dominio de la página.
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("SPLITTER_ALLOWED_ORIGINS", "*").split(",") if o.strip()]
