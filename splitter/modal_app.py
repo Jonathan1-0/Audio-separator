@@ -61,63 +61,53 @@ class Separator:
         return self.engine.device_info()
 
     @modal.method()
-    def separate(self, audio: bytes, filename: str, preset: str):
-        """Va emitiendo {"type": "progress"}, luego un {"type": "stem"} por pista (en FLAC)
-        y al final {"type": "done"} con los tiempos."""
-        import queue
+    def separate(self, audio: bytes, filename: str, preset: str, progress_queue_id: str) -> dict:
+        """Manda el avance a la cola `progress_queue_id` como {"value": 0..1} y devuelve
+        {"stems": {nombre: FLAC}, "stats": tiempos}. El primer avance, 0.0, se manda al empezar:
+        le avisa al backend que ya hay GPU. No es un generador para que el backend la pueda cancelar."""
         import shutil
         import subprocess
         import tempfile
-        import threading
         import time
         from pathlib import Path
 
         started = time.perf_counter()
+        progress = modal.Queue.from_id(progress_queue_id)
+        progress.put({"value": 0.0})
+        last = 0.0
+
+        def report(fraction: float) -> None:
+            nonlocal last
+            if fraction - last >= 0.01:  # una cola remota: no se manda cada paso
+                last = fraction
+                progress.put({"value": fraction})
+
         work = Path(tempfile.mkdtemp())
         try:
             src = work / Path(filename).name
             src.write_bytes(audio)
-            out_dir = work / "out"
+            files_before = set(os.listdir(MODEL_DIR)) if os.path.isdir(MODEL_DIR) else set()
+            files = self.engine.separate(src, work / "out", preset, report)
+            if set(os.listdir(MODEL_DIR)) != files_before:
+                models.commit()  # guarda el modelo recién descargado para los próximos contenedores
 
-            events: queue.Queue = queue.Queue()
-            result: dict = {}
-
-            def run() -> None:
-                try:
-                    files_before = set(os.listdir(MODEL_DIR)) if os.path.isdir(MODEL_DIR) else set()
-                    result["files"] = self.engine.separate(src, out_dir, preset, lambda f: events.put(f))
-                    if set(os.listdir(MODEL_DIR)) != files_before:
-                        models.commit()  # guarda el modelo recién descargado para los próximos contenedores
-                except BaseException as exc:  # noqa: BLE001 - se relanza abajo
-                    result["error"] = exc
-                finally:
-                    events.put(None)
-
-            threading.Thread(target=run, daemon=True).start()
-            last = -1.0
-            while (item := events.get()) is not None:
-                if item - last >= 0.01:
-                    last = item
-                    yield {"type": "progress", "value": item}
-            if "error" in result:
-                raise result["error"]
-
-            for stem, wav in result["files"].items():
+            stems = {}
+            for stem, wav in files.items():
                 flac = wav.with_suffix(".flac")
                 subprocess.run(
                     ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-c:a", "flac", str(flac)],
                     check=True,
                 )
-                yield {"type": "stem", "name": stem, "data": flac.read_bytes()}
+                stems[stem] = flac.read_bytes()
 
             timings = self.engine.last_timings
-            yield {
-                "type": "done",
+            stats = {
                 "gpu": GPU,
                 "gpu_seconds": time.perf_counter() - started,
                 "load_seconds": timings["load_seconds"],
                 "separate_seconds": timings["separate_seconds"],
             }
+            return {"stems": stems, "stats": stats}
         finally:
             # El contenedor atiende varios trabajos seguidos: que no se acumulen en /tmp.
             shutil.rmtree(work, ignore_errors=True)

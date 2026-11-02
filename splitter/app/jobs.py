@@ -17,6 +17,8 @@ from . import config
 log = logging.getLogger("splitter.jobs")
 
 QUEUED, PROCESSING, DONE, ERROR = "queued", "processing", "done", "error"
+# Fase de un trabajo en proceso: esperando a que Modal asigne una GPU, o ya separando.
+WAITING_GPU, SEPARATING = "waiting_gpu", "separating"
 
 
 @dataclass
@@ -31,6 +33,7 @@ class Job:
     progress: Optional[float] = 0.0  # 0..1, None si no se puede medir
     message: str = "En cola"
     error: Optional[str] = None
+    phase: Optional[str] = None  # waiting_gpu | separating; None si no se está procesando
     stem_files: Dict[str, Path] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
@@ -113,9 +116,17 @@ class JobManager:
 
     def _process(self, job: Job) -> None:
         job.status, job.message, job.progress = PROCESSING, "Separando audio…", 0.0
+        # Con Modal hay que esperar a que asigne una GPU; su primer avance avisa que ya empezó.
+        if getattr(self.engine, "waits_for_gpu", False):
+            job.phase, job.message = WAITING_GPU, "Esperando GPU…"
+        else:
+            job.phase = SEPARATING
         job.touch()
 
         def on_progress(fraction: float) -> None:
+            if job.phase == WAITING_GPU:  # llegó el primer avance: ya hay GPU
+                job.phase, job.message = SEPARATING, "Separando audio…"
+                job.touch()
             # Nunca baja, y se queda en 95 % hasta que termina de verdad.
             new = min(0.95, max(job.progress or 0.0, fraction * 0.95))
             if new - (job.progress or 0.0) >= 0.01:
@@ -136,6 +147,7 @@ class JobManager:
             job.status, job.progress, job.message = ERROR, None, "Error al procesar el audio"
             job.error = str(exc)[:300]
         finally:
+            job.phase = None
             job.finished_at = time.time()
             job.input_path.unlink(missing_ok=True)  # el original ya no hace falta
             job.touch()

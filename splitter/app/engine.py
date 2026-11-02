@@ -261,6 +261,7 @@ class ModalEngine:
 
     SEPARATION_SHARE = 0.7  # el 30 % restante de la barra es la descarga de las pistas
     parallel_jobs = config.PARALLEL_JOBS
+    waits_for_gpu = True  # cada trabajo espera a que Modal le asigne una GPU antes de empezar
 
     def __init__(self, app_name: Optional[str] = None) -> None:
         import modal
@@ -272,58 +273,43 @@ class ModalEngine:
         gpu = self.app_name.rsplit("-", 1)[-1].upper() if self.app_name.startswith("splitter-gpu-") else "GPU"
         return {"engine": "modal", "cuda": True, "device": f"NVIDIA {gpu} (Modal: {self.app_name})"}
 
-    def _events(self, audio: bytes, filename: str, preset: str):
-        """Los eventos de Modal, leídos desde otro hilo para poder dejar de esperar el primero.
-        Si Modal no tiene GPU, la llamada espera sin límite: su timeout solo cuenta la ejecución."""
-        import queue
-
-        events: "queue.Queue" = queue.Queue()
-
-        def pump() -> None:
-            try:
-                for ev in self._cls().separate.remote_gen(audio, filename, preset):
-                    events.put(ev)
-                events.put(None)
-            except BaseException as exc:  # noqa: BLE001 - se relanza en el hilo del trabajo
-                events.put(exc)
-
-        threading.Thread(target=pump, name="modal-events", daemon=True).start()
-        wait = config.MODAL_START_MINUTES * 60 or None
+    def _wait(self, call, progress, preset: str, on_progress: ProgressCb) -> dict:
+        """Espera el resultado de la llamada y, mientras tanto, pasa su avance a `on_progress`.
+        Si no llega ningún avance dentro del límite es que Modal no tiene GPU: se cancela la llamada
+        para que no se ejecute (ni se cobre) después. El timeout de Modal solo cuenta la ejecución."""
+        limit = config.MODAL_START_MINUTES * 60  # 0 = sin límite
+        deadline = time.monotonic() + limit
+        started = False
         while True:
             try:
-                event = events.get(timeout=wait)
-            except queue.Empty:
-                # Ojo: la llamada sigue en la fila de Modal y puede ejecutarse (y cobrarse) después.
-                log.error("Modal %s (%s): sin GPU tras %s min", self.app_name, preset, config.MODAL_START_MINUTES)
-                raise SeparationError("No hay GPU disponible en este momento. Intenta de nuevo en unos minutos.") from None
-            wait = None  # ya arrancó: el resto lo limita el timeout de Modal
-            if event is None:
-                return
-            if isinstance(event, BaseException):
-                raise event
-            yield event
+                return call.get(timeout=1)
+            except TimeoutError:
+                pass  # todavía no termina
+            while (item := progress.get(block=False)) is not None:
+                started = True
+                on_progress(item["value"] * self.SEPARATION_SHARE)
+            if not started and limit and time.monotonic() > deadline:
+                call.cancel()
+                log.error("Modal %s (%s): sin GPU tras %s min; llamada cancelada", self.app_name, preset,
+                          config.MODAL_START_MINUTES)
+                raise SeparationError("No hay GPU disponible en este momento. Intenta de nuevo en unos minutos.")
 
     def separate(self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb) -> Dict[str, Path]:
         import subprocess
 
+        import modal
+
         out_dir.mkdir(parents=True, exist_ok=True)
         result: Dict[str, Path] = {}
-        stats: Dict[str, float] = {}
         n_stems = len(config.PRESETS[preset]["stems"])
         audio = input_path.read_bytes()
-        bytes_received = 0
         started = time.perf_counter()
         try:
-            for event in self._events(audio, input_path.name, preset):
-                kind = event["type"]
-                if kind == "progress":
-                    on_progress(event["value"] * self.SEPARATION_SHARE)
-                    continue
-                if kind == "done":
-                    stats = {k: v for k, v in event.items() if k != "type"}
-                    continue
-                stem, data = event["name"], event["data"]
-                bytes_received += len(data)
+            # El avance llega por una cola; las pistas, en el resultado de la llamada.
+            with modal.Queue.ephemeral() as progress:
+                call = self._cls().separate.spawn(audio, input_path.name, preset, progress.object_id)
+                output = self._wait(call, progress, preset, on_progress)
+            for stem, data in output["stems"].items():
                 flac = out_dir / f"{stem}.flac"
                 flac.write_bytes(data)
                 # Llegan en FLAC; el backend trabaja con WAV.
@@ -343,14 +329,14 @@ class ModalEngine:
         if not result:
             log.error("Modal %s (%s) terminó sin devolver pistas", self.app_name, preset)
             raise SeparationError(_friendly_modal_error(RuntimeError("sin pistas")))
+        stats = dict(output.get("stats", {}))
         stats.update(
             wall_seconds=time.perf_counter() - started,
             bytes_sent=len(audio),
-            bytes_received=bytes_received,
+            bytes_received=sum(len(d) for d in output["stems"].values()),
         )
         log.info("Modal %s (%s): %s", self.app_name, preset, stats)
         return result
-
 
 class FakeEngine:
     """Simula la separación con un tono distinto por pista."""

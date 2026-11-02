@@ -83,6 +83,7 @@ def _public(job: Job) -> dict:
         "filename": job.original_name,
         "preset": job.preset,
         "queue_position": manager.queue_position(job.id),
+        "phase": job.phase,  # waiting_gpu | separating mientras status es processing; si no, null
     }
     if job.status == DONE:
         data["stems"] = [
