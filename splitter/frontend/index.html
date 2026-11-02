@@ -73,6 +73,12 @@
   a.btn[aria-disabled="true"] { opacity:.6; pointer-events:none; }
   .download-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0; }
   [hidden] { display:none !important; }
+
+  /* Cuenta */
+  .account { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
+  #auth label { display:block; margin-top:10px; }
+  #auth input { display:block; width:100%; font:inherit; color:var(--text); background:var(--panel2);
+                border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -80,7 +86,28 @@
   <h1>Splitter</h1>
   <p class="lead">Separa la voz de la música, saca cada instrumento por su lado o limpia la voz de tu podcast.</p>
 
-  <section id="setup">
+  <div class="account" id="account">
+    <span class="muted" id="accountName"></span>
+    <button type="button" id="logout" hidden>Cerrar sesión</button>
+    <button type="button" id="login">Iniciar sesión</button>
+  </div>
+
+  <section id="auth" hidden>
+    <h2 id="authTitle">Inicia sesión</h2>
+    <form id="authForm">
+      <label id="nameField" hidden>Nombre <input id="authName" autocomplete="name" maxlength="100"></label>
+      <label>Email <input id="authEmail" type="email" autocomplete="email" required></label>
+      <label>Contraseña <input id="authPassword" type="password" autocomplete="current-password" required></label>
+      <div class="actions">
+        <button class="primary" id="authGo">Entrar</button>
+        <button type="button" id="authSwitch">Crear una cuenta</button>
+        <button type="button" id="authCancel">Seguir sin cuenta</button>
+      </div>
+    </form>
+    <div class="error" id="authError" hidden></div>
+  </section>
+
+  <section id="setup" hidden>
     <h2><span class="step">1</span>¿Qué quieres hacer?</h2>
     <div class="modes" id="modes"></div>
     <div class="speed" id="speed" hidden>
@@ -96,6 +123,7 @@
       <input type="file" id="file" hidden>
       <div id="fileName"></div>
       <div class="muted" id="limits"></div>
+      <div class="muted" id="guestLimits"></div>
     </div>
 
     <div id="tracksBox" hidden>
@@ -170,6 +198,92 @@ async function errorDetail(res) {
 
 function minutes(sec) { return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }
 
+// --- cuenta
+const SAVED_TOKEN = "splitter:token", SAVED_NAME = "splitter:nombre";
+function token() { try { return localStorage.getItem(SAVED_TOKEN); } catch { return null; } }
+// Iniciar sesión es opcional: sin token no se manda el encabezado.
+function authHeaders() { return token() ? { Authorization: `Bearer ${token()}` } : {}; }
+
+function saveSession(tok, name) {
+  try {
+    if (tok) { localStorage.setItem(SAVED_TOKEN, tok); localStorage.setItem(SAVED_NAME, name); }
+    else { localStorage.removeItem(SAVED_TOKEN); localStorage.removeItem(SAVED_NAME); }
+  } catch {}
+}
+
+// La página se puede usar sin cuenta; el formulario de sesión solo se abre con el botón.
+function showAccount(openForm = false) {
+  const on = !!token();
+  $("auth").hidden = on || !openForm;
+  $("setup").hidden = !on && openForm;
+  $("login").hidden = on;
+  $("logout").hidden = !on;
+  try { $("accountName").textContent = on ? localStorage.getItem(SAVED_NAME) : "Sin cuenta"; } catch {}
+  updateLimits();
+}
+
+// Sin cuenta se avisa el límite de invitado; con cuenta, el servidor aplica el de su plan.
+function updateLimits() {
+  if (!cfg) return;
+  const inv = cfg.invitado;
+  $("guestLimits").textContent = !token() && inv
+    ? `Sin cuenta: audios de hasta ${inv.max_audio_minutes} min y ${inv.max_jobs_per_day} por día. Inicia sesión para usar tu plan.`
+    : "";
+}
+$("login").onclick = () => { setRegistering(false); showAccount(true); };
+$("authCancel").onclick = () => showAccount(false);
+
+function sessionEnded() {
+  saveSession(null);
+  saveJob(null);
+  lastJob = null;
+  showAccount();
+}
+
+let registering = false;
+function setRegistering(on) {
+  registering = on;
+  $("nameField").hidden = !on;
+  $("authTitle").textContent = on ? "Crea tu cuenta" : "Inicia sesión";
+  $("authGo").textContent = on ? "Crear cuenta" : "Entrar";
+  $("authSwitch").textContent = on ? "Ya tengo cuenta" : "Crear una cuenta";
+  $("authError").hidden = true;
+}
+$("authSwitch").onclick = () => setRegistering(!registering);
+
+async function postJson(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await errorDetail(res));
+  return res.json();
+}
+
+$("authForm").onsubmit = async (e) => {
+  e.preventDefault();
+  $("authError").hidden = true;
+  $("authGo").disabled = true;
+  const email = $("authEmail").value, password = $("authPassword").value;
+  try {
+    if (registering) await postJson("/auth/registro", { email, nombre: $("authName").value, password });
+    const s = await postJson("/auth/login", { email, password });
+    saveSession(s.token, s.nombre);
+    $("authPassword").value = "";
+    setRegistering(false);
+    showAccount();
+  } catch (err) {
+    $("authError").textContent = err.message || "No se pudo completar. Intenta de nuevo.";
+    $("authError").hidden = false;
+  } finally {
+    $("authGo").disabled = false;
+  }
+};
+
+$("logout").onclick = async () => {
+  try { await fetch("/auth/logout", { method: "POST", headers: authHeaders() }); } catch {}
+  sessionEnded();
+  clearTracks();
+  $("results").hidden = true;
+};
+
 // --- configuración
 async function loadConfig() {
   try {
@@ -183,7 +297,6 @@ async function loadConfig() {
   const common = ["mp3", "wav", "m4a", "flac"].filter((e) => cfg.accepted_extensions.includes("." + e));
   const formats = common.map((e) => e.toUpperCase()).join(", ") + (cfg.accepted_extensions.length > common.length ? " y otros" : "");
   const limits = [formats, `hasta ${cfg.max_upload_mb} MB`];
-  if (cfg.max_audio_minutes) limits.push(`máximo ${cfg.max_audio_minutes} minutos`);
   $("limits").textContent = limits.join(" · ");
   $("file").accept = cfg.accepted_extensions.join(",");
 
@@ -250,7 +363,7 @@ function updateButton() {
 
 // --- paso 2: archivo
 function readDuration(f) {
-  // Para avisar antes de subir. Si el navegador no puede leerla, la revisa el servidor.
+  // Solo para mostrarla: el límite de cada plan lo revisa el servidor.
   return new Promise((resolve) => {
     const a = document.createElement("audio");
     const url = URL.createObjectURL(f);
@@ -278,10 +391,6 @@ async function setFile(f) {
     return;
   }
   const sec = await readDuration(f);
-  if (sec && cfg.max_audio_minutes && sec > cfg.max_audio_minutes * 60) {
-    showError(`El audio dura ${minutes(sec)} y el máximo es ${cfg.max_audio_minutes} minutos.`);
-    return;
-  }
   file = f; fileSeconds = sec;
   $("fileName").textContent = sec ? `${f.name} · ${minutes(sec)}` : f.name;
   updateButton();
@@ -300,12 +409,14 @@ function upload(fd) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/jobs");
+    if (token()) xhr.setRequestHeader("Authorization", `Bearer ${token()}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setBar(e.loaded / e.total, `Subiendo tu archivo… ${Math.round((e.loaded / e.total) * 100)}%`, "");
     };
     xhr.onload = () => {
       let body = null;
       try { body = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status === 401) sessionEnded();
       if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body);
       else if (body && typeof body.detail === "string") reject(new Error(body.detail));
       else reject(new Error(xhr.status >= 500 ? "El servidor tuvo un problema. Intenta de nuevo en unos minutos." : "No se pudo subir el archivo. Intenta de nuevo."));
@@ -321,7 +432,7 @@ function saveJob(id) { try { id ? localStorage.setItem(SAVED_JOB, id) : localSto
 function savedJob() { try { return localStorage.getItem(SAVED_JOB); } catch { return null; } }
 
 function discardJob() {
-  if (lastJob) fetch(`/api/jobs/${lastJob.id}`, { method: "DELETE", keepalive: true }).catch(() => {});
+  if (lastJob) fetch(`/api/jobs/${lastJob.id}`, { method: "DELETE", keepalive: true, headers: authHeaders() }).catch(() => {});
   lastJob = null;
   saveJob(null);
 }
@@ -368,7 +479,8 @@ async function resumeJob() {
   if (!id || !cfg) return;
   let j;
   try {
-    const res = await fetch(`/api/jobs/${id}`);
+    const res = await fetch(`/api/jobs/${id}`, { headers: authHeaders() });
+    if (res.status === 401) { sessionEnded(); return; }
     if (!res.ok) { saveJob(null); return; }  // ya expiró o el servidor se reinició
     j = await res.json();
   } catch { return; }
@@ -613,7 +725,8 @@ $("again").onclick = () => {
 };
 
 setPlaying(false);
-loadConfig().then(resumeJob);
+showAccount();
+loadConfig().then(() => { updateLimits(); resumeJob(); });
 </script>
 </body>
 </html>

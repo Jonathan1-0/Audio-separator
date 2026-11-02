@@ -7,34 +7,43 @@ import logging
 import os
 import queue
 import re
+import shutil
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, media
+from .dependencies import usuario_opcional
 from .engine import build_engine
 from .jobs import DONE, ERROR, Job, JobManager
+from .models.tablas import Usuario
 from .ratelimit import RateLimiter
+from .routes import auth as rutas_auth
+from .routes import suscripcion as rutas_suscripcion
+from .routes import trabajos as rutas_trabajos
+from .seed import preparar_base
+from .services import cuotas, invitados
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("splitter.api")
 
 engine = build_engine()
 manager = JobManager(engine)
-limiter = RateLimiter(config.MAX_JOBS_PER_HOUR, 3600)
-daily_limiter = RateLimiter(config.MAX_JOBS_PER_DAY, 24 * 3600)  # una cuenta para toda la página
+# Una cuenta para toda la página: es el tope de gasto en Modal.
+daily_limiter = RateLimiter(config.MAX_JOBS_PER_DAY, 24 * 3600, config.DATA_DIR / "limite_dia.json")
 ALL_USERS = "todos"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    preparar_base()
     manager.start()
     log.info("Splitter listo — motor: %s", engine.device_info())
     yield
@@ -48,6 +57,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+app.include_router(rutas_auth.router)
+app.include_router(rutas_suscripcion.router)
+app.include_router(rutas_trabajos.router)
 
 
 # --- Utilidades
@@ -57,18 +69,18 @@ def _safe_base_name(filename: str) -> str:
     return cleaned[:80] or "audio"
 
 
-def _client_ip(request: Request) -> str:
-    if config.BEHIND_PROXY:
-        # El proxy agrega la IP real al final; lo anterior lo puede escribir el usuario.
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded.strip(" ,"):
-            return forwarded.rstrip(" ,").rsplit(",", 1)[-1].strip()
-    return request.client.host if request.client else "desconocido"
-
-
 def _job_or_404(job_id: str) -> Job:
     job = manager.get(job_id)
     if job is None:
+        raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
+    return job
+
+
+def _job_del_solicitante(job_id: str, usuario: Optional[Usuario]) -> Job:
+    """Un trabajo hecho con cuenta solo lo ve su dueño; uno sin cuenta, quien tenga su id
+    (igual que los eventos y las descargas)."""
+    job = _job_or_404(job_id)
+    if job.usuario_id is not None and (usuario is None or usuario.id != job.usuario_id):
         raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
     return job
 
@@ -138,26 +150,25 @@ def get_config():
         "default_preset": config.DEFAULT_PRESET,
         "presets": {k: {"label": v["label"], "stems": v["stems"]} for k, v in config.PRESETS.items()},
         "results_kept_minutes": config.JOB_TTL_MINUTES,
-        "max_audio_minutes": config.MAX_AUDIO_MINUTES or None,  # None = sin límite
-        "max_jobs_per_hour": config.MAX_JOBS_PER_HOUR or None,
         "max_jobs_per_day": config.MAX_JOBS_PER_DAY or None,
+        # Límites de quien no inicia sesión (con cuenta valen los de su plan).
+        "invitado": {
+            "max_audio_minutes": config.INVITADO_MINUTOS_AUDIO,
+            "max_jobs_per_day": config.INVITADO_TRABAJOS_POR_DIA,
+        },
     }
 
 
-async def _check_duration(path: Path) -> None:
+async def _audio_seconds(path: Path) -> float:
+    """Sin la duración no se puede aplicar el límite del plan: el audio se rechaza."""
     if not media.ffprobe_available():
-        log.warning("ffprobe no está instalado: no se valida la duración del audio")
-        return
+        log.error("ffprobe no está instalado: no se puede validar la duración del audio")
+        raise HTTPException(503, "No se pudo revisar el audio. Intenta de nuevo más tarde.")
     try:
-        seconds = await run_in_threadpool(media.audio_duration, path)
+        return await run_in_threadpool(media.audio_duration, path)
     except ValueError as exc:
         log.info("Audio ilegible (%s): %s", path.name, exc)
         raise HTTPException(415, "No se pudo leer el audio. Revisa que el archivo no esté dañado.")
-    if config.MAX_AUDIO_MINUTES and seconds > config.MAX_AUDIO_MINUTES * 60:
-        raise HTTPException(
-            413,
-            f"El audio dura {int(seconds // 60)}:{int(seconds % 60):02d} y el límite es de {config.MAX_AUDIO_MINUTES} min.",
-        )
 
 
 # --- Subir archivo y crear el trabajo
@@ -167,8 +178,9 @@ async def create_job(
     file: UploadFile = File(...),
     preset: str = Form(config.DEFAULT_PRESET),
     stems: str = Form(""),
+    usuario: Optional[Usuario] = Depends(usuario_opcional),
 ):
-    """`stems`: pistas separadas por comas; vacío = todas."""
+    """`stems`: pistas separadas por comas; vacío = todas. Sin sesión se usan los límites de invitado."""
     if preset not in config.PRESETS:
         raise HTTPException(400, f"Preset inválido. Opciones: {', '.join(config.PRESETS)}.")
     available = config.PRESETS[preset]["stems"]
@@ -185,19 +197,22 @@ async def create_job(
     if declared and declared.isdigit() and int(declared) > config.MAX_UPLOAD_BYTES + 1024 * 1024:
         raise HTTPException(413, f"El archivo supera el límite de {config.MAX_UPLOAD_MB} MB.")
 
-    ip = _client_ip(request)
-    wait = limiter.acquire(ip)
-    if wait:
-        minutes = max(1, round(wait / 60))
-        raise HTTPException(
-            429,
-            f"Llegaste al límite de {config.MAX_JOBS_PER_HOUR} trabajos por hora. "
-            f"Podrás mandar otro en {minutes} min.",
-            headers={"Retry-After": str(int(wait) + 1)},
-        )
+    ip = invitados.ip_de(request)
+    if usuario is not None:
+        await run_in_threadpool(cuotas.verificar_cantidad, usuario.id)
+    else:
+        invitados.reservar(ip)
+
+    def liberar_limites() -> None:
+        """Un archivo rechazado no cuenta para los límites."""
+        daily_limiter.release(ALL_USERS)
+        if usuario is None:
+            invitados.liberar(ip)
+
     wait = daily_limiter.acquire(ALL_USERS)
     if wait:
-        limiter.release(ip)
+        if usuario is None:
+            invitados.liberar(ip)
         hours = max(1, round(wait / 3600))
         raise HTTPException(
             429,
@@ -218,45 +233,45 @@ async def create_job(
                 out.write(chunk)
         if size == 0:
             raise HTTPException(400, "El archivo está vacío.")
-        await _check_duration(input_path)
-    except HTTPException:
-        import shutil
+        seconds = await _audio_seconds(input_path)
+        if usuario is not None:
+            await run_in_threadpool(cuotas.verificar_audio, usuario.id, seconds)
+        else:
+            invitados.verificar_audio(seconds)
 
-        shutil.rmtree(job_dir, ignore_errors=True)
-        limiter.release(ip)  # un archivo rechazado no cuenta para los límites
-        daily_limiter.release(ALL_USERS)
-        raise
-
-    job = Job(
-        id=job_id,
-        original_name=_safe_base_name(file.filename or "audio"),
-        preset=preset,
-        wanted_stems=wanted,
-        input_path=input_path,
-        out_dir=job_dir / "out",
-    )
-    try:
-        manager.submit(job)
+        job = Job(
+            id=job_id,
+            usuario_id=usuario.id if usuario is not None else None,  # None = sin cuenta
+            original_name=_safe_base_name(file.filename or "audio"),
+            preset=preset,
+            wanted_stems=wanted,
+            input_path=input_path,
+            out_dir=job_dir / "out",
+            size_bytes=size,
+            duration_seconds=seconds,
+        )
+        await run_in_threadpool(manager.submit, job)
     except queue.Full:
-        import shutil
-
         shutil.rmtree(job_dir, ignore_errors=True)
-        limiter.release(ip)
-        daily_limiter.release(ALL_USERS)
+        liberar_limites()
         raise HTTPException(503, "El servicio está muy ocupado. Intenta de nuevo en unos minutos.")
+    except Exception:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        liberar_limites()
+        raise
     return _public(job)
 
 
 # --- Estado y progreso en tiempo real
 @app.get("/api/jobs/{job_id}")
-def job_status(job_id: str):
-    return _public(_job_or_404(job_id))
+def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opcional)):
+    return _public(_job_del_solicitante(job_id, usuario))
 
 
 @app.get("/api/jobs/{job_id}/events")
 async def job_events(job_id: str, request: Request):
     """Server-Sent Events: manda el trabajo cada vez que cambia."""
-    _job_or_404(job_id)
+    await run_in_threadpool(_job_or_404, job_id)
 
     async def stream():
         last_version = -1
@@ -265,12 +280,13 @@ async def job_events(job_id: str, request: Request):
         while True:
             if await request.is_disconnected():
                 return
-            job = manager.get(job_id)
+            job = await run_in_threadpool(manager.get, job_id)
             if job is None:
                 yield "event: gone\ndata: {}\n\n"
                 return
             pos = manager.queue_position(job_id)
-            if job.version != last_version or pos != last_pos:
+            # Un trabajo terminado ya viene de la base, sin su contador de versión.
+            if job.version != last_version or pos != last_pos or job.status in (DONE, ERROR):
                 last_version, last_pos = job.version, pos
                 yield f"event: update\ndata: {json.dumps(_public(job))}\n\n"
                 last_beat = time.time()
@@ -292,7 +308,7 @@ async def job_events(job_id: str, request: Request):
 @app.get("/api/jobs/{job_id}/stems/{stem}/preview")
 async def stem_preview(job_id: str, stem: str):
     """MP3 liviano para escuchar en la página."""
-    job = _job_or_404(job_id)
+    job = await run_in_threadpool(_job_or_404, job_id)
     path = _stem_path(job, stem)
     try:
         mp3 = await run_in_threadpool(media.convert, path, "mp3", preview=True)
@@ -305,7 +321,7 @@ async def stem_preview(job_id: str, stem: str):
 # mientras tanto y después descarga.
 @app.get("/api/jobs/{job_id}/stems/{stem}/download")
 async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bool = False):
-    job = _job_or_404(job_id)
+    job = await run_in_threadpool(_job_or_404, job_id)
     fmt = _check_format(format)
     path = _stem_path(job, stem)
     try:
@@ -323,7 +339,7 @@ async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bo
 
 @app.get("/api/jobs/{job_id}/download")
 async def download_all(job_id: str, format: str = "wav", prepare: bool = False):
-    job = _job_or_404(job_id)
+    job = await run_in_threadpool(_job_or_404, job_id)
     fmt = _check_format(format)
     if job.status != DONE:
         raise HTTPException(409, "El trabajo todavía no termina.")
@@ -337,9 +353,9 @@ async def download_all(job_id: str, format: str = "wav", prepare: bool = False):
 
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
-def delete_job(job_id: str):
-    if not manager.delete(job_id):
-        raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
+def delete_job(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opcional)):
+    _job_del_solicitante(job_id, usuario)
+    manager.delete(job_id)
 
 
 # --- La página, si se define SPLITTER_FRONTEND_DIR

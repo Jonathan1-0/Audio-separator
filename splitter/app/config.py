@@ -20,15 +20,19 @@ MODEL_DIR = Path(os.getenv("SPLITTER_MODEL_DIR", BASE_DIR / "models")).resolve()
 MAX_UPLOAD_MB = _int("SPLITTER_MAX_UPLOAD_MB", 100)
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
-# En minutos. Hace falta además del tamaño: un MP3 de 100 MB puede durar más de una hora. 0 = sin límite.
-MAX_AUDIO_MINUTES = _int("SPLITTER_MAX_AUDIO_MINUTES", 10)
-# Por persona (IP). 0 = sin límite.
-MAX_JOBS_PER_HOUR = _int("SPLITTER_MAX_JOBS_PER_HOUR", 10)
 # Entre todas las personas, en 24 h: es el tope de gasto (~$0.03 por canción). 0 = sin límite.
 MAX_JOBS_PER_DAY = _int("SPLITTER_MAX_JOBS_PER_DAY", 100)
+
+# Quien usa la página sin iniciar sesión: límites como el plan gratis, pero por IP y por día.
+INVITADO_TRABAJOS_POR_DIA = _int("SPLITTER_INVITADO_TRABAJOS_POR_DIA", 5)
+INVITADO_MINUTOS_AUDIO = _int("SPLITTER_INVITADO_MINUTOS_AUDIO", 5)
 # 1 = tomar la IP del usuario de X-Forwarded-For. Solo detrás de un proxy (nginx, Caddy, Modal):
 # sin él, cualquiera podría inventar ese encabezado y saltarse el límite.
 BEHIND_PROXY = os.getenv("SPLITTER_BEHIND_PROXY", "0") == "1"
+
+# Duración de una sesión y de un periodo de suscripción.
+DIAS_SESION = _int("SPLITTER_DIAS_SESION", 7)
+DIAS_PERIODO = _int("SPLITTER_DIAS_PERIODO", 30)
 
 JOB_TTL_MINUTES = _int("SPLITTER_JOB_TTL_MINUTES", 60)
 # Trabajos a la vez, uno por GPU. Debe coincidir con SPLITTER_MAX_CONTAINERS de modal_app.py.

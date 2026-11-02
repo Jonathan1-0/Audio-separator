@@ -8,3 +8,5 @@ __pycache__/
 splitter/.venv/
 splitter/data/
 splitter/models/
+.env
+splitter.db

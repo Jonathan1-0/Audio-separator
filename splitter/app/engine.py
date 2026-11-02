@@ -232,6 +232,11 @@ class RealEngine:
         return result
 
 
+def gpu_seconds_del_hilo() -> Optional[float]:
+    """Segundos de GPU del último trabajo de este hilo; None si no fue en Modal."""
+    return getattr(_local, "gpu_seconds", None)
+
+
 class SeparationError(RuntimeError):
     """Su mensaje se muestra tal cual en la página."""
 
@@ -299,6 +304,7 @@ class ModalEngine:
 
         import modal
 
+        _local.gpu_seconds = None
         out_dir.mkdir(parents=True, exist_ok=True)
         result: Dict[str, Path] = {}
         n_stems = len(config.PRESETS[preset]["stems"])
@@ -336,6 +342,7 @@ class ModalEngine:
             bytes_received=sum(len(d) for d in output["stems"].values()),
         )
         log.info("Modal %s (%s): %s", self.app_name, preset, stats)
+        _local.gpu_seconds = stats.get("gpu_seconds")
         return result
 
 class FakeEngine:
