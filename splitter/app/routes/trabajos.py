@@ -10,5 +10,4 @@ router = APIRouter(prefix="/trabajos", tags=["trabajos"])
 
 @router.get("")
 def mis_trabajos(usuario: Usuario = Depends(usuario_actual)):
-    """Historial del usuario con estado, fechas y resultados."""
     return trabajos.historial(usuario.id)

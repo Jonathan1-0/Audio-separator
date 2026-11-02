@@ -28,11 +28,9 @@ def registro(datos: DatosRegistro):
 
 @router.post("/login")
 def login(datos: DatosLogin):
-    """Devuelve el token de la sesión."""
     return auth.login(datos.email, datos.password)
 
 
 @router.post("/logout", status_code=204)
 def logout(token: str = Depends(token_actual), _usuario: Usuario = Depends(usuario_actual)):
-    """Borra la sesión actual."""
     auth.logout(token)

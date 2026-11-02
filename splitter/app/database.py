@@ -15,14 +15,11 @@ ES_SQLITE = DATABASE_URL.startswith("sqlite")
 
 
 def _argumentos_conexion() -> dict:
-    """Devuelve las opciones de conexión según la base que se use."""
     if ES_SQLITE:
         # Los hilos de la cola y los de FastAPI comparten la base.
         return {"check_same_thread": False}
     ruta_ca = os.getenv("DB_SSL_CA")
-    if ruta_ca:
-        return {"ssl": {"ca": str(config.BASE_DIR / ruta_ca)}}
-    return {}
+    return {"ssl": {"ca": str(config.BASE_DIR / ruta_ca)}} if ruta_ca else {}
 
 
 db_engine = create_engine(
@@ -37,18 +34,18 @@ SessionLocal = sessionmaker(bind=db_engine, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
-    """Clase de la que heredan todas las tablas."""
+    pass
 
 
 if ES_SQLITE:
     @event.listens_for(db_engine, "connect")
     def _activar_foreign_keys(conexion, _registro) -> None:
-        """SQLite no revisa las llaves foráneas si no se le pide."""
+        # SQLite no revisa las llaves foráneas si no se le pide.
         cursor = conexion.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
 
 def ahora_utc() -> datetime:
-    """Fecha actual en UTC, sin zona horaria porque DATETIME de MySQL no la guarda."""
+    """Sin zona horaria porque DATETIME de MySQL no la guarda."""
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)

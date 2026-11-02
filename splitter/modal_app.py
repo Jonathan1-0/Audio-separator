@@ -62,9 +62,8 @@ class Separator:
 
     @modal.method()
     def separate(self, audio: bytes, filename: str, preset: str, progress_queue_id: str) -> dict:
-        """Manda el avance a la cola `progress_queue_id` como {"value": 0..1} y devuelve
-        {"stems": {nombre: FLAC}, "stats": tiempos}. El primer avance, 0.0, se manda al empezar:
-        le avisa al backend que ya hay GPU. No es un generador para que el backend la pueda cancelar."""
+        """Manda el avance a la cola como {"value": 0..1} y devuelve {"stems": {nombre: FLAC}, "stats"}.
+        El primer 0.0 le avisa al backend que ya hay GPU. No es generador para poder cancelarla."""
         import shutil
         import subprocess
         import tempfile
@@ -78,7 +77,7 @@ class Separator:
 
         def report(fraction: float) -> None:
             nonlocal last
-            if fraction - last >= 0.01:  # una cola remota: no se manda cada paso
+            if fraction - last >= 0.01:  # la cola es remota: no se manda cada paso
                 last = fraction
                 progress.put({"value": fraction})
 

@@ -1,8 +1,7 @@
 """Motores de separación.
 
-  - ModalEngine: el que usa el backend; manda el audio a Modal y recibe las pistas.
-  - RealEngine: corre audio-separator dentro del contenedor de Modal.
-  - FakeEngine: tonos de prueba, para trabajar en la página sin gastar crédito.
+ModalEngine lo usa el backend, RealEngine corre dentro del contenedor de Modal
+y FakeEngine da tonos de prueba sin gastar crédito.
 """
 from __future__ import annotations
 
@@ -29,14 +28,14 @@ _local = threading.local()
 def _report(fraction: float) -> None:
     """Demucs recorre varias barras seguidas (una por submodelo); se juntan en un solo 0..1."""
     cb: Optional[ProgressCb] = getattr(_local, "cb", None)
-    if cb is not None:
-        if getattr(_local, "bars", None) is None:
-            # No se puede saber antes: demucs carga su modelo dentro de separate().
-            fn = getattr(_local, "bars_fn", None)
-            _local.bars = fn() if fn else 1
-        bars = _local.bars
-        done = min(getattr(_local, "bars_done", 0), bars - 1)
-        cb(max(0.0, min(1.0, (done + fraction) / bars)))
+    if cb is None:
+        return
+    if getattr(_local, "bars", None) is None:
+        # Se calcula aquí porque demucs carga su modelo dentro de separate().
+        fn = getattr(_local, "bars_fn", None)
+        _local.bars = fn() if fn else 1
+    done = min(getattr(_local, "bars_done", 0), _local.bars - 1)
+    cb(max(0.0, min(1.0, (done + fraction) / _local.bars)))
 
 
 def _bar_finished() -> None:
@@ -82,7 +81,7 @@ def _patch_tqdm() -> None:
     ):
         try:
             mod = __import__(modname, fromlist=["tqdm"])
-        except Exception:  # no existe en esta versión
+        except Exception:
             continue
         current = getattr(mod, "tqdm", None)
         if current is None:
@@ -165,8 +164,8 @@ class RealEngine:
         self, model: str, autocast: bool, input_path: Path, out_dir: Path,
         names: Dict[str, str], on_progress: ProgressCb, timings: Dict[str, float],
     ) -> Dict[str, Path]:
-        """`names` da el nombre de salida de cada pista del modelo (sin `_` ni `.` en las orillas:
-        la librería los quita). Si trae una sola pista, solo se guarda esa."""
+        """`names`: pista del modelo -> nombre de salida (la librería quita `_` y `.` de las orillas).
+        Con una sola pista, solo se guarda esa."""
         t0 = time.perf_counter()
         sep = self._separator(model, out_dir, autocast)
         t1 = time.perf_counter()
@@ -200,7 +199,7 @@ class RealEngine:
         if "steps" in spec:
             result = self._separate_steps(spec, input_path, out_dir, on_progress, timings)
         else:
-            names = spec.get("model_stems") or {s: s for s in spec["stems"]}
+            names = {s: s for s in spec["stems"]}
             result = self._run_model(
                 spec["model"], spec.get("autocast", False), input_path, out_dir, names, on_progress, timings
             )
@@ -245,7 +244,7 @@ def _friendly_modal_error(exc: BaseException) -> str:
     import modal.exception as me
 
     text = str(exc).lower()
-    if isinstance(exc, (me.ResourceExhaustedError,)) or any(
+    if isinstance(exc, me.ResourceExhaustedError) or any(
         w in text for w in ("billing", "spend limit", "credit", "quota")
     ):
         return "El servicio de separación llegó a su límite de uso. Intenta de nuevo más tarde."
@@ -279,9 +278,8 @@ class ModalEngine:
         return {"engine": "modal", "cuda": True, "device": f"NVIDIA {gpu} (Modal: {self.app_name})"}
 
     def _wait(self, call, progress, preset: str, on_progress: ProgressCb) -> dict:
-        """Espera el resultado de la llamada y, mientras tanto, pasa su avance a `on_progress`.
-        Si no llega ningún avance dentro del límite es que Modal no tiene GPU: se cancela la llamada
-        para que no se ejecute (ni se cobre) después. El timeout de Modal solo cuenta la ejecución."""
+        """Espera el resultado y pasa el avance a `on_progress`. Si no llega ningún avance a tiempo,
+        Modal no tiene GPU: se cancela para que no corra (ni se cobre) después."""
         limit = config.MODAL_START_MINUTES * 60  # 0 = sin límite
         deadline = time.monotonic() + limit
         started = False
@@ -289,7 +287,7 @@ class ModalEngine:
             try:
                 return call.get(timeout=1)
             except TimeoutError:
-                pass  # todavía no termina
+                pass
             while (item := progress.get(block=False)) is not None:
                 started = True
                 on_progress(item["value"] * self.SEPARATION_SHARE)
@@ -344,6 +342,7 @@ class ModalEngine:
         log.info("Modal %s (%s): %s", self.app_name, preset, stats)
         _local.gpu_seconds = stats.get("gpu_seconds")
         return result
+
 
 class FakeEngine:
     """Simula la separación con un tono distinto por pista."""

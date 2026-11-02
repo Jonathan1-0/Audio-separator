@@ -12,7 +12,7 @@ from ..repositories import trabajos as repo_trabajos
 
 
 def crear_periodo_gratis(db: Session, usuario_id: int) -> Suscripcion:
-    """Da al usuario un periodo nuevo del plan gratis; quien llama hace el commit."""
+    """Periodo nuevo del plan gratis; quien llama hace el commit."""
     plan = repo_suscripciones.buscar_plan(db, "gratis")
     inicio = ahora_utc()
     fin = inicio + timedelta(days=config.DIAS_PERIODO)
@@ -20,7 +20,7 @@ def crear_periodo_gratis(db: Session, usuario_id: int) -> Suscripcion:
 
 
 def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
-    """Devuelve la suscripción activa; si se venció, el usuario pasa a un periodo gratis nuevo."""
+    """Si la activa ya venció, el usuario pasa a un periodo gratis nuevo."""
     suscripcion = repo_suscripciones.buscar_activa(db, usuario_id)
     if suscripcion is not None and suscripcion.fin_periodo > ahora_utc():
         return suscripcion
@@ -32,7 +32,6 @@ def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
 
 
 def _revisar_cantidad(db: Session, suscripcion: Suscripcion) -> None:
-    """Rechaza si el usuario ya usó todos los trabajos de su periodo."""
     usados = repo_trabajos.contar_en_periodo(
         db, suscripcion.usuario_id, suscripcion.inicio_periodo, suscripcion.fin_periodo
     )
@@ -46,13 +45,12 @@ def _revisar_cantidad(db: Session, suscripcion: Suscripcion) -> None:
 
 
 def verificar_cantidad(usuario_id: int) -> None:
-    """Revisión antes de subir el archivo."""
     with SessionLocal() as db:
         _revisar_cantidad(db, suscripcion_vigente(db, usuario_id))
 
 
 def verificar_audio(usuario_id: int, segundos: float) -> None:
-    """Revisión con el audio ya subido: duración, y otra vez la cantidad por si hubo subidas a la vez."""
+    """Con el audio ya subido: duración, y otra vez la cantidad por si hubo subidas a la vez."""
     with SessionLocal() as db:
         suscripcion = suscripcion_vigente(db, usuario_id)
         _revisar_cantidad(db, suscripcion)

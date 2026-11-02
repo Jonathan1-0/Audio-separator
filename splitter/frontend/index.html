@@ -170,7 +170,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 
-// Textos para el usuario. Lo que el backend tenga y no esté aquí no se muestra.
+// Lo que el backend tenga y no esté aquí no se muestra.
 const MODES = [
   { id: "vocals", title: "Separar voz y música", text: "Una pista con la voz y otra con la música sin voz.", presets: { fast: "2stem" }, button: "Separar" },
   { id: "instruments", title: "Separar instrumentos", text: "Voz, batería, bajo y el resto de instrumentos por separado.", presets: { fast: "4stem_fast", best: "4stem" }, button: "Separar" },
@@ -186,7 +186,7 @@ const FORMAT_NAMES = {
 };
 const trackName = (s) => TRACK_NAMES[s] || s;
 
-let cfg = null, file = null, fileSeconds = null, mode = null, es = null, lastJob = null, busy = false;
+let cfg = null, file = null, mode = null, es = null, lastJob = null, busy = false;
 
 function showError(msg) { $("error").textContent = msg || ""; $("error").hidden = !msg; }
 
@@ -296,8 +296,7 @@ async function loadConfig() {
   }
   const common = ["mp3", "wav", "m4a", "flac"].filter((e) => cfg.accepted_extensions.includes("." + e));
   const formats = common.map((e) => e.toUpperCase()).join(", ") + (cfg.accepted_extensions.length > common.length ? " y otros" : "");
-  const limits = [formats, `hasta ${cfg.max_upload_mb} MB`];
-  $("limits").textContent = limits.join(" · ");
+  $("limits").textContent = `${formats} · hasta ${cfg.max_upload_mb} MB`;
   $("file").accept = cfg.accepted_extensions.join(",");
 
   for (const f of cfg.output_formats) $("format").add(new Option(FORMAT_NAMES[f] || f.toUpperCase(), f));
@@ -378,7 +377,7 @@ function readDuration(f) {
 
 async function setFile(f) {
   showError("");
-  file = null; fileSeconds = null; $("fileName").textContent = "";
+  file = null; $("fileName").textContent = "";
   updateButton();
   if (!f || !cfg) return;
   const ext = f.name.includes(".") ? "." + f.name.split(".").pop().toLowerCase() : "";
@@ -391,7 +390,7 @@ async function setFile(f) {
     return;
   }
   const sec = await readDuration(f);
-  file = f; fileSeconds = sec;
+  file = f;
   $("fileName").textContent = sec ? `${f.name} · ${minutes(sec)}` : f.name;
   updateButton();
 }
@@ -517,7 +516,7 @@ function showJob(j) {
     const detail = ahead === 0 ? "Eres el siguiente." : `Hay ${ahead} ${ahead === 1 ? "persona" : "personas"} antes que tú.`;
     setBar(null, "Esperando turno…", detail);
   } else if (j.status === "processing") {
-    const pct = j.progress == null ? null : j.progress;
+    const pct = j.progress ?? null;
     const action = mode && mode.id === "podcast" ? "Limpiando tu audio" : "Separando tu audio";
     setBar(pct, pct == null ? `${action}…` : `${action}… ${Math.round(pct * 100)}%`,
            "Puedes dejar esta página abierta mientras termina.");

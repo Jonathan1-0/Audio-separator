@@ -10,7 +10,7 @@ PLANES = [
 
 
 def preparar_base() -> None:
-    """Crea las tablas que falten y los planes, sin duplicar lo que ya existe."""
+    """Crea lo que falte, sin duplicar."""
     Base.metadata.create_all(db_engine)
     with SessionLocal() as db:
         for datos in PLANES:

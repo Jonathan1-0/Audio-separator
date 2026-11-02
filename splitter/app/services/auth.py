@@ -16,7 +16,6 @@ MAX_BYTES_PASSWORD = 72  # bcrypt no acepta más
 
 
 def _validar_datos(email: str, nombre: str, password: str) -> None:
-    """Rechaza datos de registro inválidos."""
     if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 255:
         raise HTTPException(400, "El email no es válido.")
     if not nombre or len(nombre) > 100:
@@ -26,7 +25,7 @@ def _validar_datos(email: str, nombre: str, password: str) -> None:
 
 
 def registrar(email: str, nombre: str, password: str) -> dict:
-    """Crea el usuario con su suscripción gratis."""
+    """Crea el usuario con el plan gratis."""
     email, nombre = email.strip().lower(), nombre.strip()
     _validar_datos(email, nombre, password)
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -44,7 +43,6 @@ def registrar(email: str, nombre: str, password: str) -> dict:
 
 
 def login(email: str, password: str) -> dict:
-    """Revisa la contraseña y crea una sesión de 7 días."""
     with SessionLocal() as db:
         usuario = repo_usuarios.buscar_por_email(db, email.strip().lower())
         correcta = usuario is not None and len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(
@@ -64,14 +62,13 @@ def login(email: str, password: str) -> dict:
 
 
 def logout(token: str) -> None:
-    """Borra la sesión de ese token."""
     with SessionLocal() as db:
         repo_usuarios.borrar_sesion(db, token)
         db.commit()
 
 
 def usuario_por_token(token: str) -> Usuario:
-    """Devuelve el dueño del token, o 401 si no sirve."""
+    """401 si el token no sirve."""
     with SessionLocal() as db:
         sesion = repo_usuarios.buscar_sesion(db, token)
         if sesion is None or sesion.expira_en <= ahora_utc():

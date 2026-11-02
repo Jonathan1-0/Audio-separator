@@ -7,12 +7,10 @@ from ..repositories import trabajos as repo_trabajos
 
 
 def _fecha(valor: Optional[datetime]) -> Optional[str]:
-    """Fecha en texto, marcada como UTC."""
     return f"{valor.isoformat()}Z" if valor else None
 
 
 def historial(usuario_id: int) -> List[dict]:
-    """Trabajos del usuario con sus resultados."""
     ahora = ahora_utc()
     with SessionLocal() as db:
         return [

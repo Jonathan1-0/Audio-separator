@@ -1,8 +1,4 @@
-"""Límites de quien usa Splitter sin iniciar sesión.
-
-Con cuenta, los límites salen del plan (services/cuotas.py). Sin cuenta no hay plan ni base:
-se cuenta por IP, con valores parecidos a los del plan gratis.
-"""
+"""Límites de quien usa Splitter sin cuenta: se cuentan por IP, parecidos al plan gratis."""
 from fastapi import HTTPException, Request
 
 from .. import config
@@ -13,7 +9,6 @@ _por_ip = RateLimiter(config.INVITADO_TRABAJOS_POR_DIA, 24 * 3600, config.DATA_D
 
 
 def ip_de(request: Request) -> str:
-    """IP de quien hace la petición."""
     if config.BEHIND_PROXY:
         # El proxy agrega la IP real al final; lo anterior lo puede escribir el usuario.
         forwarded = request.headers.get("x-forwarded-for", "")
@@ -23,7 +18,7 @@ def ip_de(request: Request) -> str:
 
 
 def reservar(ip: str) -> None:
-    """Aparta un trabajo de los del día para esa IP, o rechaza con 429."""
+    """Aparta un trabajo del día para esa IP, o da 429."""
     wait = _por_ip.acquire(ip)
     if wait:
         horas = max(1, round(wait / 3600))
@@ -36,7 +31,7 @@ def reservar(ip: str) -> None:
 
 
 def liberar(ip: str) -> None:
-    """Devuelve el trabajo apartado: un archivo rechazado no cuenta."""
+    """Un archivo rechazado no cuenta."""
     _por_ip.release(ip)
 
 

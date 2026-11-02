@@ -1,7 +1,6 @@
-"""Cola de trabajos, atendida por varios hilos a la vez (uno por GPU de Modal).
+"""Cola de trabajos, con un hilo por GPU de Modal.
 
-La base guarda los trabajos hechos con cuenta. En memoria quedan los activos, para que el SSE lea
-su progreso, y los de quien no inició sesión, que no se guardan en la base.
+En memoria quedan los trabajos activos y los de invitados; los de cuentas terminados viven en la base.
 """
 from __future__ import annotations
 
@@ -34,6 +33,7 @@ ESTADOS_BD = {QUEUED: "en_cola", PROCESSING: "procesando", DONE: "completado", E
 ESTADOS_JOB = {v: k for k, v in ESTADOS_BD.items()}
 MENSAJES = {QUEUED: "En cola", PROCESSING: "Separando audio…", DONE: "Listo", ERROR: "Error al procesar el audio"}
 
+
 @dataclass
 class Job:
     id: str
@@ -54,14 +54,14 @@ class Job:
     gpu_seconds: Optional[float] = None
     created_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
-    version: int = 0  # sube con cada cambio, para que los eventos sepan si hay novedades
+    version: int = 0  # sube con cada cambio; el SSE lo usa para saber si hay novedades
 
     def touch(self) -> None:
         self.version += 1
 
 
 def _segundos(fecha) -> Optional[float]:
-    """Convierte una fecha UTC de la base al formato de time.time()."""
+    """Fecha UTC de la base -> time.time()."""
     return fecha.replace(tzinfo=timezone.utc).timestamp() if fecha else None
 
 
@@ -98,7 +98,7 @@ class JobManager:
     def __init__(self, engine) -> None:
         self.engine = engine
         self.jobs: Dict[str, Job] = {}
-        self._order: List[str] = []  # para la posición en la cola
+        self._order: List[str] = []  # posición en la cola
         self._queue: "queue.Queue[str]" = queue.Queue(maxsize=config.MAX_QUEUE)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -148,14 +148,13 @@ class JobManager:
                 raise
 
     def _encolar(self, job: Job) -> None:
-        """Lanza queue.Full si la cola está llena."""
         with self._lock:
             self._queue.put_nowait(job.id)
             self.jobs[job.id] = job
             self._order.append(job.id)
 
     def get(self, job_id: str) -> Optional[Job]:
-        """Primero mira la memoria (trabajos activos); si no está ahí, la base."""
+        """Primero la memoria, luego la base."""
         job = self.jobs.get(job_id)
         if job is not None:
             return job
@@ -176,7 +175,7 @@ class JobManager:
         with self._lock:
             if job_id in self._order:
                 self._order.remove(job_id)
-        if job is not None and job.usuario_id is None:  # sin cuenta: no tiene fila en la base
+        if job is not None and job.usuario_id is None:  # invitado: no tiene fila en la base
             shutil.rmtree(config.DATA_DIR / job_id, ignore_errors=True)
             return True
         with SessionLocal() as db:
@@ -237,7 +236,7 @@ class JobManager:
                     p.unlink(missing_ok=True)
             job.stem_files = keep
             job.status, job.progress, job.message = DONE, 1.0, MENSAJES[DONE]
-        except Exception as exc:  # noqa: BLE001 - todo fallo debe llegar a la página
+        except Exception as exc:  # noqa: BLE001 - el error se muestra en la página
             if self.jobs.get(job.id) is not job:
                 log.info("Trabajo %s borrado mientras se procesaba", job.id)
             else:
@@ -247,20 +246,20 @@ class JobManager:
         finally:
             job.phase = None
             job.finished_at = time.time()
-            job.input_path.unlink(missing_ok=True)  # el original ya no hace falta
+            job.input_path.unlink(missing_ok=True)
             job.touch()
             if self.jobs.get(job.id) is job:
-                # Sin cuenta se queda en memoria hasta que expire (ver _clean_loop).
+                # El de invitado se queda en memoria hasta que expire (ver _clean_loop).
                 if job.usuario_id is not None and self._guardar_final(job):
-                    self.jobs.pop(job.id, None)  # ya está en la base
+                    self.jobs.pop(job.id, None)
             else:
                 # Se borró mientras se procesaba: el motor volvió a crear la carpeta al escribir.
                 shutil.rmtree(config.DATA_DIR / job.id, ignore_errors=True)
 
     def _guardar_estado(self, job: Job) -> None:
-        """Guarda estado y progreso. Si la base falla, el trabajo sigue."""
+        """Si la base falla, el trabajo sigue igual."""
         if job.usuario_id is None:
-            return  # sin cuenta: no va a la base
+            return
         try:
             with SessionLocal() as db:
                 repo_trabajos.actualizar_estado(db, job.id, ESTADOS_BD[job.status], int((job.progress or 0) * 100))
@@ -268,7 +267,7 @@ class JobManager:
             log.exception("No se pudo guardar el progreso de %s", job.id)
 
     def _guardar_final(self, job: Job) -> bool:
-        """Guarda el resultado. Si la base falla, el trabajo sigue en memoria."""
+        """Si la base falla, el trabajo sigue en memoria."""
         ahora = ahora_utc()
         try:
             with SessionLocal() as db:
@@ -296,29 +295,32 @@ class JobManager:
             for fila in pendientes:
                 carpeta = config.DATA_DIR / fila.id
                 entradas = list(carpeta.glob("input.*"))
-                job = _job_desde_fila(fila)
-                try:
-                    if not entradas:
-                        raise queue.Full
-                    job.input_path = entradas[0]
-                    job.status, job.progress, job.message = QUEUED, 0.0, MENSAJES[QUEUED]
-                    shutil.rmtree(job.out_dir, ignore_errors=True)
-                    self._encolar(job)
+                if entradas and self._reencolar(_job_desde_fila(fila), entradas[0]):
                     repo_trabajos.actualizar_estado(db, fila.id, "en_cola", 0)
                     requeued += 1
-                except queue.Full:
-                    shutil.rmtree(carpeta, ignore_errors=True)
-                    repo_trabajos.terminar(
-                        db, fila.id, "error", 0, ahora_utc(), "El servidor se reinició y no se pudo retomar.",
-                        None, {}, ahora_utc(),
-                    )
+                    continue
+                shutil.rmtree(carpeta, ignore_errors=True)
+                repo_trabajos.terminar(
+                    db, fila.id, "error", 0, ahora_utc(), "El servidor se reinició y no se pudo retomar.",
+                    None, {}, ahora_utc(),
+                )
         if pendientes:
             log.info("%d trabajo(s) pendientes; %d vuelven a la cola", len(pendientes), requeued)
+
+    def _reencolar(self, job: Job, entrada: Path) -> bool:
+        job.input_path = entrada
+        job.status, job.progress, job.message = QUEUED, 0.0, MENSAJES[QUEUED]
+        shutil.rmtree(job.out_dir, ignore_errors=True)
+        try:
+            self._encolar(job)
+            return True
+        except queue.Full:
+            return False
 
     def _clean_loop(self) -> None:
         while not self._stop.wait(60):
             cutoff = time.time() - config.JOB_TTL_MINUTES * 60
-            # Los trabajos sin cuenta terminados salen de la memoria al expirar; luego se borra su carpeta.
+            # Los de invitado salen de la memoria al expirar; su carpeta se borra abajo.
             for job_id, job in list(self.jobs.items()):
                 if job.usuario_id is None and job.finished_at and job.finished_at < cutoff:
                     self.jobs.pop(job_id, None)

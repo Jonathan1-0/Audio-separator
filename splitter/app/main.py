@@ -36,7 +36,7 @@ log = logging.getLogger("splitter.api")
 
 engine = build_engine()
 manager = JobManager(engine)
-# Una cuenta para toda la página: es el tope de gasto en Modal.
+# Un solo contador para toda la página: es el tope de gasto en Modal.
 daily_limiter = RateLimiter(config.MAX_JOBS_PER_DAY, 24 * 3600, config.DATA_DIR / "limite_dia.json")
 ALL_USERS = "todos"
 
@@ -77,8 +77,7 @@ def _job_or_404(job_id: str) -> Job:
 
 
 def _job_del_solicitante(job_id: str, usuario: Optional[Usuario]) -> Job:
-    """Un trabajo hecho con cuenta solo lo ve su dueño; uno sin cuenta, quien tenga su id
-    (igual que los eventos y las descargas)."""
+    """El trabajo de una cuenta solo lo ve su dueño; el de un invitado, quien tenga su id."""
     job = _job_or_404(job_id)
     if job.usuario_id is not None and (usuario is None or usuario.id != job.usuario_id):
         raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
@@ -88,14 +87,14 @@ def _job_del_solicitante(job_id: str, usuario: Optional[Usuario]) -> Job:
 def _public(job: Job) -> dict:
     data = {
         "id": job.id,
-        "status": job.status,  # queued | processing | done | error
-        "progress": job.progress,  # 0..1, o null
+        "status": job.status,
+        "progress": job.progress,  # 0..1 o null
         "message": job.message,
         "error": job.error,
         "filename": job.original_name,
         "preset": job.preset,
         "queue_position": manager.queue_position(job.id),
-        "phase": job.phase,  # waiting_gpu | separating mientras status es processing; si no, null
+        "phase": job.phase,  # waiting_gpu | separating, solo en processing
     }
     if job.status == DONE:
         data["stems"] = [
@@ -142,7 +141,6 @@ def health():
 
 @app.get("/api/config")
 def get_config():
-    """Límites, formatos y presets para armar la página."""
     return {
         "max_upload_mb": config.MAX_UPLOAD_MB,
         "accepted_extensions": sorted(config.ALLOWED_INPUT_EXT),
@@ -151,7 +149,6 @@ def get_config():
         "presets": {k: {"label": v["label"], "stems": v["stems"]} for k, v in config.PRESETS.items()},
         "results_kept_minutes": config.JOB_TTL_MINUTES,
         "max_jobs_per_day": config.MAX_JOBS_PER_DAY or None,
-        # Límites de quien no inicia sesión (con cuenta valen los de su plan).
         "invitado": {
             "max_audio_minutes": config.INVITADO_MINUTOS_AUDIO,
             "max_jobs_per_day": config.INVITADO_TRABAJOS_POR_DIA,
@@ -160,7 +157,7 @@ def get_config():
 
 
 async def _audio_seconds(path: Path) -> float:
-    """Sin la duración no se puede aplicar el límite del plan: el audio se rechaza."""
+    """Sin la duración no se puede aplicar el límite del plan, así que el audio se rechaza."""
     if not media.ffprobe_available():
         log.error("ffprobe no está instalado: no se puede validar la duración del audio")
         raise HTTPException(503, "No se pudo revisar el audio. Intenta de nuevo más tarde.")
@@ -171,7 +168,7 @@ async def _audio_seconds(path: Path) -> float:
         raise HTTPException(415, "No se pudo leer el audio. Revisa que el archivo no esté dañado.")
 
 
-# --- Subir archivo y crear el trabajo
+# --- Crear el trabajo
 @app.post("/api/jobs", status_code=202)
 async def create_job(
     request: Request,
@@ -180,7 +177,7 @@ async def create_job(
     stems: str = Form(""),
     usuario: Optional[Usuario] = Depends(usuario_opcional),
 ):
-    """`stems`: pistas separadas por comas; vacío = todas. Sin sesión se usan los límites de invitado."""
+    """`stems`: pistas separadas por comas; vacío = todas."""
     if preset not in config.PRESETS:
         raise HTTPException(400, f"Preset inválido. Opciones: {', '.join(config.PRESETS)}.")
     available = config.PRESETS[preset]["stems"]
@@ -204,7 +201,7 @@ async def create_job(
         invitados.reservar(ip)
 
     def liberar_limites() -> None:
-        """Un archivo rechazado no cuenta para los límites."""
+        # Un archivo rechazado no cuenta.
         daily_limiter.release(ALL_USERS)
         if usuario is None:
             invitados.liberar(ip)
@@ -241,7 +238,7 @@ async def create_job(
 
         job = Job(
             id=job_id,
-            usuario_id=usuario.id if usuario is not None else None,  # None = sin cuenta
+            usuario_id=usuario.id if usuario is not None else None,
             original_name=_safe_base_name(file.filename or "audio"),
             preset=preset,
             wanted_stems=wanted,
@@ -262,7 +259,7 @@ async def create_job(
     return _public(job)
 
 
-# --- Estado y progreso en tiempo real
+# --- Estado y progreso
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opcional)):
     return _public(_job_del_solicitante(job_id, usuario))
@@ -270,7 +267,7 @@ def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
 
 @app.get("/api/jobs/{job_id}/events")
 async def job_events(job_id: str, request: Request):
-    """Server-Sent Events: manda el trabajo cada vez que cambia."""
+    """SSE: manda el trabajo cada vez que cambia."""
     await run_in_threadpool(_job_or_404, job_id)
 
     async def stream():
@@ -285,7 +282,7 @@ async def job_events(job_id: str, request: Request):
                 yield "event: gone\ndata: {}\n\n"
                 return
             pos = manager.queue_position(job_id)
-            # Un trabajo terminado ya viene de la base, sin su contador de versión.
+            # Uno terminado puede venir de la base, sin contador de versión.
             if job.version != last_version or pos != last_pos or job.status in (DONE, ERROR):
                 last_version, last_pos = job.version, pos
                 yield f"event: update\ndata: {json.dumps(_public(job))}\n\n"
@@ -317,8 +314,7 @@ async def stem_preview(job_id: str, stem: str):
     return FileResponse(mp3, media_type="audio/mpeg")
 
 
-# Con prepare=1 solo se convierte el archivo (queda en caché): la página muestra "Preparando…"
-# mientras tanto y después descarga.
+# Con prepare=1 solo se convierte (queda en caché); la página muestra "Preparando…" y luego descarga.
 @app.get("/api/jobs/{job_id}/stems/{stem}/download")
 async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bool = False):
     job = await run_in_threadpool(_job_or_404, job_id)

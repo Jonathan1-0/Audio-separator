@@ -25,14 +25,13 @@ th { background:#262a31; } .datos { overflow-x:auto; } summary { cursor:pointer;
 
 
 def _celda(columna: str, valor) -> str:
-    """Texto de una celda; los datos sensibles no se muestran."""
+    """Los datos sensibles no se muestran."""
     if columna in OCULTAS:
         return "<td>••••</td>"
     return f"<td>{'' if valor is None else html.escape(str(valor))}</td>"
 
 
 def _estructura(inspector, tabla: str) -> str:
-    """Tabla con las columnas, sus tipos y sus llaves."""
     pk = inspector.get_pk_constraint(tabla)["constrained_columns"]
     fk = {
         c: f'{f["referred_table"]}.{f["referred_columns"][0]}'
@@ -48,7 +47,7 @@ def _estructura(inspector, tabla: str) -> str:
 
 
 def _seccion(conexion, inspector, tabla: str) -> tuple[str, int]:
-    """Arma el bloque de una tabla y devuelve también su número de filas."""
+    """Devuelve el bloque de la tabla y su número de filas."""
     total = conexion.scalar(text(f"select count(*) from {tabla}"))
     columnas = [c["name"] for c in inspector.get_columns(tabla)]
     filas = conexion.execute(text(f"select * from {tabla} limit {MAX_FILAS}")).mappings().all()
@@ -66,7 +65,6 @@ def _seccion(conexion, inspector, tabla: str) -> tuple[str, int]:
 
 
 def _pagina() -> str:
-    """Lee la base y arma la página completa."""
     inspector = inspect(db_engine)
     with db_engine.connect() as conexion:
         if not ES_SQLITE:
@@ -86,7 +84,7 @@ class Visor(BaseHTTPRequestHandler):
         """No escribe cada petición en la terminal."""
 
     def do_GET(self) -> None:
-        """Responde con la página; un error solo muestra su tipo, nunca la conexión."""
+        """Un error solo muestra su tipo, nunca los datos de conexión."""
         try:
             cuerpo, codigo = _pagina(), 200
         except Exception as exc:  # noqa: BLE001
