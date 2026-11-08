@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from .. import config
 from ..database import SessionLocal, ahora_utc
 from ..repositories import suscripciones as repo_suscripciones
-from .cuotas import crear_periodo_gratis, suscripcion_vigente
+from .cuotas import suscripcion_vigente
 
 
 def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
@@ -46,13 +46,20 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
 
 def cancelar_pro(usuario_id: int) -> dict:
     """Pasa al usuario al plan gratis desde ahora. El plan pro no se renueva solo, así que cancelar
-    al final del periodo no cambiaría nada; el pago (simulado) no se devuelve."""
+    al final del periodo no cambiaría nada; el pago (simulado) no se devuelve.
+
+    El plan gratis sigue con las mismas fechas del periodo pro: los trabajos que ya se hicieron en él
+    siguen contando, así que cancelar no da trabajos nuevos. Al terminar ese periodo empieza uno
+    gratis normal."""
     with SessionLocal() as db:
         actual = suscripcion_vigente(db, usuario_id)
         if actual.plan.nombre != "pro":
             raise HTTPException(409, "No tienes el plan pro.")
         actual.estado = "cancelada"
         db.flush()
-        nueva = crear_periodo_gratis(db, usuario_id)
+        gratis = repo_suscripciones.buscar_plan(db, "gratis")
+        nueva = repo_suscripciones.crear_suscripcion(
+            db, usuario_id, gratis, actual.inicio_periodo, actual.fin_periodo
+        )
         db.commit()  # todo se guarda junto, o nada
         return {"plan": "gratis", "fin_periodo": f"{nueva.fin_periodo.isoformat()}Z"}

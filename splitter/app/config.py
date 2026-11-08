@@ -83,6 +83,7 @@ PRESETS = {
         "label": "Voz, batería, bajo y otros (lenta, mejor calidad)",
         "model": "htdemucs_ft.yaml",  # 4 modelos combinados
         "stems": ["vocals", "drums", "bass", "other"],
+        "mejor_calidad": True,  # solo para planes con mejor_calidad (pro); cuesta ~4× más GPU
     },
     "4stem_fast": {
         "label": "Voz, batería, bajo y otros (rápida)",

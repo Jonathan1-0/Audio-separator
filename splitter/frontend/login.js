@@ -1,4 +1,5 @@
-// UI only. Authentication will be connected in a later integration.
+// Dialogo de inicio de sesion y registro. Las llamadas al backend viven en account.js
+// (window.iniciarSesion / window.registrarse), que tambien guarda la sesion.
 // Motion is optional: if the CDN is unreachable the modal still works, without animation.
 const MOTION_URL = 'https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm';
 const EASE = [0.22, 1, 0.36, 1];
@@ -15,10 +16,13 @@ const form = $('login-form');
 const email = $('login-email');
 const password = $('login-password');
 const confirm = $('login-confirm');
+const nameInput = $('login-name');
+const submit = $('login-submit');
 const message = $('login-message');
 const modes = {
   login: { title: 'Inicia sesión', lead: 'Guarda tus separaciones y vuelve a ellas cuando quieras.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
+  // Solo interfaz: el backend todavia no envia correos para recuperar la contrasena.
   reset: { title: 'Recupera tu acceso', lead: 'Escribe tu correo y te enviaremos un enlace para elegir otra contraseña.', submit: 'Enviar enlace', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login' },
 };
 let mode = 'login';
@@ -47,11 +51,13 @@ function setMode(next) {
   $('switch-link').dataset.modeTarget = m.next;
   $('password-fields').hidden = next === 'reset';
   $('confirm-field').hidden = next !== 'register';
+  $('name-field').hidden = next !== 'register';
   $('forgot-link').hidden = next !== 'login';
   $('social-auth').hidden = next === 'reset';
   if (m.autocomplete) password.autocomplete = m.autocomplete;
   password.required = next !== 'reset';
   confirm.required = next === 'register';
+  nameInput.required = next === 'register';
   setMessage();
 }
 
@@ -123,7 +129,7 @@ document.querySelectorAll('[data-open-login]').forEach((button) => {
 form.addEventListener('click', (event) => {
   const provider = event.target.closest('[data-provider]');
   if (provider) {
-    // No fabricated session: the provider flow will be connected in a later integration.
+    // Solo interfaz: el acceso con Google, Apple o Facebook todavia no esta conectado al backend.
     const name = provider.querySelector('.social-name').textContent;
     showMessage(`Vista previa: el acceso con ${name} estará disponible próximamente.`);
     return;
@@ -131,7 +137,7 @@ form.addEventListener('click', (event) => {
   const target = event.target.closest('[data-mode-target]');
   if (!target) return;
   switchMode(target.dataset.modeTarget);
-  email.focus();
+  (mode === 'register' ? nameInput : email).focus();
 });
 $('login-close').addEventListener('click', requestClose);
 // Escape runs the exit animation instead of closing the dialog abruptly.
@@ -165,14 +171,25 @@ dialog.addEventListener('keydown', (event) => {
   else if (!event.shiftKey && (active === last || !dialog.contains(active))) { event.preventDefault(); first.focus(); }
 });
 
-form.addEventListener('submit', (event) => {
+let sending = false;
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (sending) return;
+  if (mode === 'register' && !nameInput.value.trim()) {
+    showMessage('Escribe tu nombre.');
+    nameInput.focus();
+    return;
+  }
   if (!email.value.trim() || !email.validity.valid) {
     showMessage('Escribe un correo electrónico válido.');
     email.focus();
     return;
   }
-  if (mode !== 'reset' && !password.value) {
+  if (mode === 'reset') {
+    showMessage('Vista previa: la recuperación de acceso estará disponible próximamente.');
+    return;
+  }
+  if (!password.value) {
     showMessage('Escribe tu contraseña.');
     password.focus();
     return;
@@ -189,8 +206,18 @@ form.addEventListener('submit', (event) => {
       return;
     }
   }
-  // No fabricated session or email: this phase only implements the interface.
-  showMessage(mode === 'login' ? 'Vista previa: el inicio de sesión estará disponible próximamente.'
-    : mode === 'register' ? 'Vista previa: el registro estará disponible próximamente.'
-    : 'Vista previa: la recuperación de acceso estará disponible próximamente.');
+  sending = true;
+  submit.disabled = true;
+  setMessage();
+  try {
+    if (mode === 'register') await window.registrarse(email.value.trim(), nameInput.value.trim(), password.value);
+    else await window.iniciarSesion(email.value.trim(), password.value);
+    sending = false;
+    submit.disabled = false;
+    await requestClose();
+  } catch (error) {
+    sending = false;
+    submit.disabled = false;
+    showMessage(error.message);
+  }
 });

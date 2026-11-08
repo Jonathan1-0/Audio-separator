@@ -17,6 +17,12 @@ def ip_de(request: Request) -> str:
     return request.client.host if request.client else "desconocido"
 
 
+def verificar_preset(preset: str) -> None:
+    """Sin cuenta se tiene lo del plan gratis: sin la mejor calidad."""
+    if config.PRESETS.get(preset, {}).get("mejor_calidad"):
+        raise HTTPException(403, "La mejor calidad de separación es del plan Pro. Usa la calidad rápida o inicia sesión.")
+
+
 def reservar(ip: str) -> None:
     """Aparta un trabajo del día para esa IP, o da 429."""
     wait = _por_ip.acquire(ip)

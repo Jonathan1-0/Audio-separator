@@ -53,9 +53,17 @@ def _revisar_cantidad(db: Session, suscripcion: Suscripcion) -> None:
         )
 
 
-def verificar_cantidad(usuario_id: int) -> None:
+def es_mejor_calidad(preset: str) -> bool:
+    return bool(config.PRESETS.get(preset, {}).get("mejor_calidad"))
+
+
+def verificar_cantidad(usuario_id: int, preset: str) -> None:
+    """Antes de subir el archivo: que le queden trabajos y que su plan incluya esa calidad."""
     with SessionLocal() as db:
-        _revisar_cantidad(db, suscripcion_vigente(db, usuario_id))
+        suscripcion = suscripcion_vigente(db, usuario_id)
+        if es_mejor_calidad(preset) and not suscripcion.plan.mejor_calidad:
+            raise HTTPException(403, "La mejor calidad de separación es del plan Pro. Usa la calidad rápida o pásate a Pro.")
+        _revisar_cantidad(db, suscripcion)
 
 
 def verificar_audio(usuario_id: int, segundos: float) -> None:

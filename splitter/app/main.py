@@ -148,7 +148,10 @@ def get_config():
         "accepted_extensions": sorted(config.ALLOWED_INPUT_EXT),
         "output_formats": list(config.OUTPUT_FORMATS),
         "default_preset": config.DEFAULT_PRESET,
-        "presets": {k: {"label": v["label"], "stems": v["stems"]} for k, v in config.PRESETS.items()},
+        "presets": {
+            k: {"label": v["label"], "stems": v["stems"], "mejor_calidad": bool(v.get("mejor_calidad"))}
+            for k, v in config.PRESETS.items()
+        },
         "results_kept_minutes": config.JOB_TTL_MINUTES,
         "max_jobs_per_day": config.MAX_JOBS_PER_DAY or None,
         "invitado": {
@@ -198,8 +201,9 @@ async def create_job(
 
     ip = invitados.ip_de(request)
     if usuario is not None:
-        await run_in_threadpool(cuotas.verificar_cantidad, usuario.id)
+        await run_in_threadpool(cuotas.verificar_cantidad, usuario.id, preset)
     else:
+        invitados.verificar_preset(preset)
         invitados.reservar(ip)
 
     def liberar_limites() -> None:
@@ -356,7 +360,7 @@ def delete_job(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
     manager.delete(job_id)
 
 
-# --- La página, si se define SPLITTER_FRONTEND_DIR
-_frontend = os.getenv("SPLITTER_FRONTEND_DIR")
-if _frontend and Path(_frontend).is_dir():
+# --- La página: splitter/frontend, o la carpeta de SPLITTER_FRONTEND_DIR
+_frontend = os.getenv("SPLITTER_FRONTEND_DIR") or str(Path(__file__).resolve().parent.parent / "frontend")
+if Path(_frontend).is_dir():
     app.mount("/", StaticFiles(directory=_frontend, html=True), name="frontend")

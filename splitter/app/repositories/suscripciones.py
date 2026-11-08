@@ -1,7 +1,7 @@
 """Consultas de planes, suscripciones, métodos de pago y pagos."""
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -11,6 +11,11 @@ from ..models.tablas import MetodoPago, Pago, Plan, Suscripcion
 
 def buscar_plan(db: Session, nombre: str) -> Optional[Plan]:
     return db.scalar(select(Plan).where(Plan.nombre == nombre))
+
+
+def listar_planes(db: Session) -> List[Plan]:
+    """Del más barato al más caro."""
+    return list(db.scalars(select(Plan).order_by(Plan.precio_mensual, Plan.id)))
 
 
 def crear_plan(db: Session, **datos) -> Plan:

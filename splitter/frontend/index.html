@@ -1,1025 +1,191 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Splitter</title>
-<link rel="icon" href="data:,">
-<style>
-  :root { --bg:#14161a; --panel:#1d2026; --panel2:#262a31; --line:#2e323a; --text:#e6e8eb; --muted:#9097a1;
-          --accent:#5b9dff; --accent-ink:#0b1220; --err:#ff6b6b; --ok:#4cc38a; color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
-  main { max-width:680px; margin:0 auto; padding:28px 16px 56px; }
-  h1 { font-size:24px; margin:0; }
-  h2 { font-size:16px; margin:0 0 12px; }
-  .lead { color:var(--muted); margin:4px 0 0; }
-  .muted { color:var(--muted); font-size:13px; }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; margin-top:16px; }
-  .step { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--panel2);
-          font-size:12px; margin-right:6px; vertical-align:1px; }
-
-  /* Paso 1: qué hacer */
-  .modes { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
-  .mode { text-align:left; background:var(--panel2); border:2px solid transparent; border-radius:8px; padding:12px;
-          color:var(--text); font:inherit; cursor:pointer; }
-  .mode strong { display:block; margin-bottom:2px; }
-  .mode span { color:var(--muted); font-size:13px; }
-  .mode[aria-pressed="true"] { border-color:var(--accent); background:#5b9dff14; }
-  .speed { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-  .speed label { flex:1 1 200px; display:flex; gap:8px; align-items:flex-start; background:var(--panel2);
-                 border:1px solid var(--line); border-radius:8px; padding:10px; cursor:pointer; }
-  .speed label:has(input:checked) { border-color:var(--accent); }
-  .speed small { display:block; color:var(--muted); }
-
-  /* Paso 2: archivo */
-  #drop { border:2px dashed var(--line); border-radius:8px; padding:26px 12px; text-align:center; cursor:pointer; }
-  #drop.over { border-color:var(--accent); background:#5b9dff14; }
-  #fileName { margin-top:8px; font-weight:600; word-break:break-word; }
-
-  /* Paso 3: pistas */
-  .tracks label { display:inline-flex; align-items:center; gap:6px; margin:4px 16px 4px 0; cursor:pointer; }
-
-  select, button { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
-  button { cursor:pointer; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; padding:10px 22px; font-size:16px; }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  .actions { margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-
-  .bar { height:10px; background:var(--panel2); border-radius:5px; overflow:hidden; margin:10px 0 6px; }
-  .bar > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
-  .bar.indet > div { width:30%; animation:slide 1.2s infinite linear; }
-  @keyframes slide { from { margin-left:-30%; } to { margin-left:100%; } }
-  #status { font-weight:600; }
-  .error { color:var(--err); background:#ff6b6b18; border:1px solid #ff6b6b55; border-radius:6px; padding:10px 12px; margin-top:12px; }
-
-  /* Reproductor */
-  .player { display:flex; align-items:center; gap:10px; background:var(--panel2); border-radius:8px; padding:10px 12px; }
-  button.play { flex:none; width:44px; height:44px; padding:0; border-radius:50%; display:grid; place-items:center;
-                background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-  .player input[type=range] { flex:1; min-width:0; }
-  input[type=range] { accent-color:var(--accent); }
-  .time { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:3.2em; text-align:center; }
-  #playerStatus { margin:6px 0 0; min-height:1.5em; }
-
-  .track { display:grid; grid-template-columns:minmax(7em, 10em) 1fr 3.2em auto; align-items:center; gap:10px;
-           border-top:1px solid var(--line); padding:10px 0; }
-  .track:first-child { border-top:0; }
-  .track input[type=range] { width:100%; }
-  .vol { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-align:right; }
-  @media (max-width:480px) { .track { grid-template-columns:1fr 3.2em auto; } .track strong { grid-column:1 / -1; } }
-  a.btn { display:inline-block; padding:6px 12px; border:1px solid var(--accent); border-radius:6px; color:var(--accent); text-decoration:none; }
-  a.btn.solid { background:var(--accent); color:var(--accent-ink); font-weight:600; }
-  a.btn[aria-disabled="true"] { opacity:.6; pointer-events:none; }
-  .download-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0; }
-  [hidden] { display:none !important; }
-
-  /* Cuenta */
-  .account { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
-  .badge { font-size:12px; border:1px solid var(--line); border-radius:999px; padding:1px 8px; color:var(--muted); }
-  .badge.pro { border-color:var(--accent); color:var(--accent); }
-  #auth label { display:block; margin-top:10px; }
-
-  /* Pasarse a Pro */
-  #upgrade ul { margin:8px 0 0; padding-left:20px; }
-  #upgrade label { display:block; margin-top:10px; }
-  #upgrade select, #upgrade input { display:block; width:100%; max-width:260px; font:inherit; color:var(--text);
-                                    background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:4px; }
-  .price { font-size:22px; font-weight:700; margin:12px 0 0; }
-  .notice { background:#5b9dff14; border:1px solid #5b9dff55; border-radius:6px; padding:10px 12px; margin-top:12px; font-size:13px; }
-  .success { color:var(--ok); background:#4cc38a18; border:1px solid #4cc38a55; border-radius:6px; padding:10px 12px; margin-top:12px; }
-
-  /* Mis audios (plan pro) */
-  .history-item { display:flex; gap:12px; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding:10px 0; }
-  .history-item:first-child { border-top:0; }
-  .history-item div { min-width:0; }
-  .history-item strong { display:block; word-break:break-word; }
-  .history-item button { flex:none; }
-  .plan-box { border-top:1px solid var(--line); margin-top:14px; padding-top:14px; }
-  .plan-box .actions { margin-top:10px; }
-  button.danger { border-color:#ff6b6b88; color:var(--err); }
-  #auth input { display:block; width:100%; font:inherit; color:var(--text); background:var(--panel2);
-                border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:4px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A0A0A">
+  <meta name="description" content="Tu audio, a tu manera. Separa voces e instrumentos o limpia el ruido con Splitter.">
+  <title>Splitter — Tu audio, a tu manera</title>
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap" rel="stylesheet">
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="account.js" defer></script>
+  <script src="index.js" defer></script>
+  <script src="script.js" defer></script>
+  <script src="smoke.js" defer></script>
+  <script src="wave.js" defer></script>
+  <script src="scripts/liquidGL.js" defer></script>
+  <script src="glass.js" defer></script>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm">
+  <script type="module" src="entrance.js"></script>
+  <script type="module" src="login.js"></script>
 </head>
 <body>
-<main>
-  <h1>Splitter</h1>
-  <p class="lead">Separa la voz de la música, saca cada instrumento por su lado o limpia la voz de tu podcast.</p>
-
-  <div class="account" id="account">
-    <span class="muted" id="accountName"></span>
-    <span class="badge" id="planBadge" hidden></span>
-    <button type="button" id="goPro" hidden>Pasarse a Pro</button>
-    <button type="button" id="logout" hidden>Cerrar sesión</button>
-    <button type="button" id="login">Iniciar sesión</button>
-  </div>
-
-  <section id="auth" hidden>
-    <h2 id="authTitle">Inicia sesión</h2>
-    <form id="authForm">
-      <label id="nameField" hidden>Nombre <input id="authName" autocomplete="name" maxlength="100"></label>
-      <label>Email <input id="authEmail" type="email" autocomplete="email" required></label>
-      <label>Contraseña <input id="authPassword" type="password" autocomplete="current-password" required></label>
-      <div class="actions">
-        <button class="primary" id="authGo">Entrar</button>
-        <button type="button" id="authSwitch">Crear una cuenta</button>
-        <button type="button" id="authCancel">Seguir sin cuenta</button>
-      </div>
-    </form>
-    <div class="error" id="authError" hidden></div>
-  </section>
-
-  <section id="upgrade" hidden>
-    <h2>Pásate al plan Pro</h2>
-    <ul id="proPerks"></ul>
-    <p class="price" id="proPrice"></p>
-    <div class="notice">Pago de prueba: el proyecto todavía no cobra. No escribas el número completo de tu tarjeta, solo la marca y los últimos 4 dígitos.</div>
-    <form id="upgradeForm">
-      <label>Tarjeta
-        <select id="cardBrand">
-          <option value="Visa">Visa</option>
-          <option value="Mastercard">Mastercard</option>
-          <option value="American Express">American Express</option>
-        </select>
-      </label>
-      <label>Últimos 4 dígitos
-        <input id="cardLast4" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" placeholder="1234" required>
-      </label>
-      <div class="actions">
-        <button class="primary" id="payGo">Contratar Pro</button>
-        <button type="button" id="upgradeCancel">Ahora no</button>
-      </div>
-    </form>
-    <div class="error" id="upgradeError" hidden></div>
-  </section>
-  <div class="success" id="upgradeDone" hidden></div>
-
-  <section id="setup" hidden>
-    <h2><span class="step">1</span>¿Qué quieres hacer?</h2>
-    <div class="modes" id="modes"></div>
-    <div class="speed" id="speed" hidden>
-      <label><input type="radio" name="speed" value="fast" checked>
-        <div>Rápida<small>Lista en menos tiempo. Ideal para practicar o probar.</small></div></label>
-      <label><input type="radio" name="speed" value="best">
-        <div>Mejor calidad<small>Tarda un poco más, pero cada instrumento suena más limpio.</small></div></label>
-    </div>
-
-    <h2 style="margin-top:20px"><span class="step">2</span>Sube tu audio</h2>
-    <div id="drop" role="button" tabindex="0">
-      Arrastra tu archivo aquí o <button type="button" id="pick">elige uno</button>
-      <input type="file" id="file" hidden>
-      <div id="fileName"></div>
-      <div class="muted" id="limits"></div>
-      <div class="muted" id="guestLimits"></div>
-    </div>
-
-    <div id="tracksBox" hidden>
-      <h2 style="margin-top:20px"><span class="step">3</span>¿Qué quieres descargar?</h2>
-      <div class="tracks" id="tracks"></div>
-    </div>
-
-    <div class="actions">
-      <button class="primary" id="go" disabled>Empezar</button>
-      <span class="muted" id="hint"></span>
-    </div>
-    <div class="error" id="error" hidden></div>
-  </section>
-
-  <section id="progress" hidden>
-    <div id="status">Subiendo tu archivo…</div>
-    <div class="bar" id="bar"><div></div></div>
-    <div class="muted" id="detail"></div>
-  </section>
-
-  <section id="results" hidden>
-    <h2>¡Listo! Escucha y descarga</h2>
-    <div class="player">
-      <button type="button" class="play" id="playAll" aria-label="Reproducir" disabled></button>
-      <span class="time" id="timeNow">0:00</span>
-      <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="Posición" disabled>
-      <span class="time" id="timeTotal">0:00</span>
-    </div>
-    <p class="muted" id="playerStatus"></p>
-    <div id="trackList"></div>
-    <p class="muted">El volumen es solo para escuchar: las descargas salen con cada pista completa.</p>
-    <div class="download-bar">
-      <a id="zip" class="btn solid" href="#" download>Descargar todo</a>
-      <label class="muted">Formato:
-        <select id="format"></select>
-      </label>
-    </div>
-    <div class="error" id="resultsError" hidden></div>
-    <p class="muted" id="expires"></p>
-    <button type="button" id="again">Procesar otro audio</button>
-  </section>
-
-  <section id="history" hidden>
-    <h2>Mis audios</h2>
-    <p class="muted" id="historyNote"></p>
-    <div id="historyList"></div>
-    <div class="error" id="historyError" hidden></div>
-    <div class="plan-box">
-      <span class="muted" id="proUntil"></span>
-      <button type="button" id="cancelPro">Cancelar plan Pro</button>
-      <div id="cancelConfirm" hidden>
-        <p><strong>¿Seguro que quieres cancelar el plan Pro?</strong></p>
-        <p class="muted">Pasas al plan gratis desde ahora. No se devuelve lo que pagaste, dejas de ver «Mis audios»
-          y tus próximos audios se guardan solo 1 hora.</p>
-        <div class="actions">
-          <button type="button" class="danger" id="cancelYes">Sí, cancelar</button>
-          <button type="button" id="cancelNo">No, seguir con Pro</button>
+  <canvas id="smoke-canvas" class="smoke-canvas" aria-hidden="true"></canvas>
+  <header class="site-header" data-liquid-ignore>
+    <nav class="nav-inner" aria-label="Principal">
+      <a class="brand" href="#top" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
+      <div class="nav-actions">
+        <a class="nav-how" href="#mode-section">Cómo funciona</a>
+        <a id="nav-planes-link" class="nav-planes" href="planes.html">Planes</a>
+        <button type="button" class="nav-login" data-open-login aria-haspopup="dialog">Inicia sesión</button>
+        <button id="nav-register" type="button" class="nav-register" data-open-login aria-haspopup="dialog">Regístrate</button>
+        <a id="nav-plan" class="primary-button nav-cta" href="planes.html" hidden>Planes</a>
+        <div class="profile" id="profile" hidden>
+          <button id="profile-button" class="profile-button" type="button" aria-expanded="false" aria-controls="profile-menu" aria-label="Cuenta">
+            <svg class="profile-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.7-3.7 3.6-5.6 7.2-5.6s6.5 1.9 7.2 5.6"/></svg>
+            <span id="profile-initial" class="profile-initial" aria-hidden="true" hidden></span>
+          </button>
+          <div id="profile-menu" class="profile-menu" hidden>
+            <div class="menu-user menu-session"><strong id="menu-name"></strong><span id="menu-email"></span><span id="menu-plan" class="menu-plan"></span></div>
+            <a class="menu-item menu-mobile" href="#mode-section">Cómo funciona</a>
+            <a class="menu-item menu-mobile menu-guest" href="planes.html">Planes</a>
+            <button type="button" class="menu-item menu-mobile menu-guest" data-open-login aria-haspopup="dialog">Iniciar sesión</button>
+            <button id="menu-audios" class="menu-item menu-session menu-pro" type="button">Mis audios</button>
+            <a class="menu-item menu-session menu-free" href="planes.html">Pasarse a Pro</a>
+            <button id="menu-cancel" class="menu-item menu-session menu-pro" type="button">Cancelar plan Pro</button>
+            <button id="menu-logout" class="menu-item menu-session" type="button">Cerrar sesión</button>
+          </div>
         </div>
       </div>
-      <div class="error" id="cancelError" hidden></div>
+    </nav>
+  </header>
+
+  <main id="top" class="workspace">
+    <section class="intro" aria-labelledby="page-title">
+      <canvas id="wave-canvas" class="wave-canvas" aria-hidden="true"></canvas>
+      <p class="eyebrow">Separador de audio</p>
+      <h1 id="page-title">Tu audio, a tu manera.</h1>
+      <p class="intro-description">Separa la voz, descubre cada instrumento o elimina el ruido. Dale espacio a lo que quieres escuchar.</p>
+      <div class="hero-actions"><a class="primary-button" href="#upload-section">Subir audio</a><a class="text-link" href="#mode-section">Cómo funciona <span aria-hidden="true">›</span></a></div>    </section>
+
+    <div id="flow-block" class="flow-block">
+    <form id="splitter-form" class="studio-flow" novalidate>
+      <section id="mode-section" class="step mode-step" aria-labelledby="mode-title">
+        <div class="light" aria-hidden="true"></div>
+        <div class="step-heading"><p class="eyebrow"><span class="step-number">01</span> Elige tu punto de partida</p><h2 id="mode-title">¿Qué quieres hacer?</h2></div>
+        <div class="mode-grid">
+          <label class="mode-card">
+            <input type="radio" name="mode" value="vocals">
+            <span class="mini-spectrum" data-stems="voz bajo" data-tone="ash" aria-hidden="true"></span>
+            <span class="mode-name">Separar voz y música</span>
+            <span class="mode-description">Una pista con la voz y otra con la música sin voz.</span>
+            <span class="mode-caption">Voz + instrumental</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="mode" value="instruments">
+            <span class="mini-spectrum" data-stems="voz bateria bajo otros" data-tone="pearl" aria-hidden="true"></span>
+            <span class="mode-name">Separar instrumentos</span>
+            <span class="mode-description">Voz, batería, bajo y el resto de instrumentos por separado.</span>
+            <span class="mode-caption">Cada pista, por separado</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="mode" value="clean">
+            <span class="mini-spectrum" data-stems="voz" data-tone="ash" aria-hidden="true"></span>
+            <span class="mode-name">Limpiar ruido</span>
+            <span class="mode-description">Quita la música y el ruido de fondo y deja solo la voz.</span>
+            <span class="mode-caption">Solo lo que importa</span>
+          </label>
+        </div>
+        <div id="quality-accordion" class="quality-accordion">
+        <fieldset id="quality-options" class="quality-options" aria-label="Calidad de separación" hidden>
+          <label class="quality-pill"><input type="radio" name="quality" value="fast" checked><span><strong>Rápida</strong><small>Lista en menos tiempo. Ideal para practicar.</small></span></label>
+          <label class="quality-pill"><input type="radio" name="quality" value="best"><span><strong>Mejor calidad</strong><small>Un poco más de tiempo, un sonido más limpio.</small></span></label>
+        </fieldset>
+        </div>
+      </section>
+
+      <section id="upload-section" class="step upload-step" aria-labelledby="upload-title">
+        <div class="step-heading"><p class="eyebrow"><span class="step-number">02</span> Tu próxima mezcla empieza aquí</p><h2 id="upload-title">Sube tu audio</h2></div>
+        <div id="dropzone" class="dropzone">
+          <div id="upload-prompt" class="upload-prompt">
+            <p>Arrastra tu archivo aquí <span class="muted">o</span> <label for="audio-file" class="file-picker">elige uno <span aria-hidden="true">›</span></label></p>
+            <p class="file-formats" id="file-requirements">Comprobando los requisitos…</p>
+          </div>
+          <input id="audio-file" name="audio" type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus,.wma" aria-describedby="file-requirements file-error" class="sr-only">
+          <div id="file-summary" class="file-summary" hidden>
+            
+            <div class="file-details"><strong id="file-name"></strong><span id="file-meta"></span></div>
+            <button id="remove-file" type="button" class="remove-file" aria-label="Quitar archivo">×</button>
+          </div>
+        </div>
+        <p id="file-error" class="file-error" role="alert" hidden></p>
+      </section>
+
+      <section class="step tracks-step" aria-labelledby="tracks-title">
+        <div class="step-heading"><p class="eyebrow"><span class="step-number">03</span> Tú eliges qué conservar</p><h2 id="tracks-title">¿Qué quieres descargar?</h2></div>
+        <div id="tracks-section" hidden><div id="track-options" class="track-options"></div></div>
+        <div class="action-row"><button id="start-button" class="primary-button btn-primary" type="submit" disabled><span id="action-label">Empezar</span><span aria-hidden="true">↗</span></button><p id="action-hint" class="action-hint" aria-live="polite">Elige qué quieres hacer.</p></div>
+      </section>
+    </form>
+
+    <section id="job-panel" class="panel job-panel" aria-labelledby="job-title" hidden>
+      <p class="eyebrow">En proceso</p>
+      <h2 id="job-title" class="panel-title">Procesando tu audio</h2>
+      <p id="job-file" class="job-file"></p>
+      <div id="job-bar" class="progress" role="progressbar" aria-labelledby="job-title" aria-valuemin="0" aria-valuemax="100"><span class="progress-fill"></span></div>
+      <p id="job-message" class="job-message" role="status" aria-live="polite"></p>
+      <p id="job-detail" class="job-detail" aria-live="polite"></p>
+      <button id="job-cancel" class="secondary-button" type="button">Cancelar</button>
+    </section>
+
+    <section id="results-panel" class="panel results-panel" aria-labelledby="results-title" hidden>
+      <h2 id="results-title" class="panel-title">¡Listo! Escucha y descarga</h2>
+      <div class="player">
+        <button id="play-all" class="play-button" type="button" aria-label="Reproducir" disabled></button>
+        <span id="time-now" class="time">0:00</span>
+        <input id="seek" class="range" type="range" min="0" max="0" step="0.01" value="0" aria-label="Posición de la reproducción" disabled>
+        <span id="time-total" class="time">0:00</span>
+      </div>
+      <p id="player-status" class="panel-note" role="status" aria-live="polite"></p>
+      <ul id="track-list" class="track-list"></ul>
+      <p class="panel-note">El volumen es solo para escuchar: las descargas salen con cada pista completa.</p>
+      <div class="download-row">
+        <button id="download-all" class="primary-button" type="button">Descargar todo</button>
+        <label class="format-label" for="format">Formato:</label>
+        <select id="format" class="select"></select>
+      </div>
+      <p id="expires" class="panel-note"></p>
+      <p id="results-error" class="file-error panel-error" role="alert" hidden></p>
+      <button id="again" class="secondary-button" type="button">Procesar otro audio</button>
+    </section>
     </div>
-  </section>
-  <div class="success" id="cancelDone" hidden></div>
-</main>
-
-<script>
-const $ = (id) => document.getElementById(id);
-
-// Lo que el backend tenga y no esté aquí no se muestra.
-const MODES = [
-  { id: "vocals", title: "Separar voz y música", text: "Una pista con la voz y otra con la música sin voz.", presets: { fast: "2stem" }, button: "Separar" },
-  { id: "instruments", title: "Separar instrumentos", text: "Voz, batería, bajo y el resto de instrumentos por separado.", presets: { fast: "4stem_fast", best: "4stem" }, button: "Separar" },
-  { id: "podcast", title: "Limpiar ruido", text: "Quita la música y el ruido de fondo y deja solo la voz.", presets: { fast: "denoise" }, button: "Limpiar audio" },
-];
-const TRACK_NAMES = {
-  vocals: "Voz", instrumental: "Música sin voz", drums: "Batería", bass: "Bajo", other: "Otros instrumentos",
-  voice: "Voz limpia",
-};
-const FORMAT_NAMES = {
-  mp3: "MP3 (recomendado)", wav: "WAV (máxima calidad, pesa más)", flac: "FLAC (máxima calidad, pesa menos que WAV)",
-  ogg: "OGG", m4a: "M4A (iPhone / Apple)",
-};
-const trackName = (s) => TRACK_NAMES[s] || s;
-
-let cfg = null, file = null, mode = null, es = null, lastJob = null, busy = false;
-let plan = null;  // plan de la cuenta (GET /suscripcion); null sin cuenta
-const hasHistory = () => !!(plan && plan.historial);
-
-function showError(msg) { $("error").textContent = msg || ""; $("error").hidden = !msg; }
-
-async function errorDetail(res) {
-  try { const j = await res.json(); if (typeof j.detail === "string") return j.detail; } catch {}
-  if (res.status >= 500) return "El servidor tuvo un problema. Intenta de nuevo en unos minutos.";
-  return "No se pudo completar. Intenta de nuevo.";
-}
-
-function minutes(sec) { return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-// El servidor manda fechas UTC con microsegundos; algunos navegadores solo aceptan 3 decimales.
-const parseDate = (iso) => new Date(iso.replace(/(\.\d{3})\d+/, "$1"));
-const dateText = (iso) => parseDate(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-
-// --- cuenta
-const SAVED_TOKEN = "splitter:token", SAVED_NAME = "splitter:nombre";
-function token() { try { return localStorage.getItem(SAVED_TOKEN); } catch { return null; } }
-// Iniciar sesión es opcional: sin token no se manda el encabezado.
-function authHeaders() { return token() ? { Authorization: `Bearer ${token()}` } : {}; }
-
-function saveSession(tok, name) {
-  try {
-    if (tok) { localStorage.setItem(SAVED_TOKEN, tok); localStorage.setItem(SAVED_NAME, name); }
-    else { localStorage.removeItem(SAVED_TOKEN); localStorage.removeItem(SAVED_NAME); }
-  } catch {}
-}
-
-// La página se puede usar sin cuenta; el formulario de sesión solo se abre con el botón.
-let upgrading = false;  // formulario de "Pasarse a Pro" abierto
-
-function showAccount(openForm = false) {
-  const on = !!token();
-  if (!on || hasHistory()) upgrading = false;
-  const formOpen = (!on && openForm) || upgrading;
-  $("auth").hidden = on || !formOpen;
-  $("upgrade").hidden = !upgrading;
-  $("setup").hidden = formOpen;
-  // Con el formulario abierto no se ve lo de atrás; al cerrarlo vuelve lo que estaba.
-  $("progress").hidden = formOpen || !busy;
-  $("results").hidden = formOpen || !lastJob;
-  $("history").hidden = formOpen || !hasHistory();
-  $("login").hidden = on;
-  $("logout").hidden = !on;
-  try { $("accountName").textContent = on ? localStorage.getItem(SAVED_NAME) : "Sin cuenta"; } catch {}
-  $("planBadge").hidden = !(on && plan);
-  $("goPro").hidden = !(on && plan && plan.plan !== "pro") || upgrading;
-  if (plan) {
-    $("planBadge").textContent = plan.plan === "pro" ? "Plan Pro" : "Plan gratis";
-    $("planBadge").classList.toggle("pro", plan.plan === "pro");
-  }
-  updateLimits();
-}
-
-// Sin cuenta se avisa el límite de invitado; con cuenta, el servidor aplica el de su plan.
-function updateLimits() {
-  if (!cfg) return;
-  const inv = cfg.invitado;
-  $("guestLimits").textContent = !token() && inv
-    ? `Sin cuenta: audios de hasta ${inv.max_audio_minutes} min y ${inv.max_jobs_per_day} por día. Inicia sesión para usar tu plan.`
-    : "";
-}
-$("login").onclick = () => { setRegistering(false); showAccount(true); };
-$("authCancel").onclick = () => showAccount(false);
-
-function sessionEnded() {
-  // El trabajo era de la cuenta: deja de seguirse y no se muestra.
-  finish();
-  saveSession(null);
-  saveJob(null);
-  lastJob = null;
-  plan = null;
-  upgrading = false;
-  $("upgradeDone").hidden = $("cancelDone").hidden = true;
-  resetCancel();
-  $("historyList").innerHTML = "";
-  clearTracks();
-  showAccount();
-}
-
-// --- plan y "Mis audios" (solo plan pro)
-async function loadPlan() {
-  if (!token()) { plan = null; showAccount(); return; }
-  try {
-    const res = await fetch("/suscripcion", { headers: authHeaders() });
-    if (res.status === 401) { sessionEnded(); return; }
-    if (!res.ok) return;
-    plan = await res.json();
-  } catch { return; }
-  showAccount();
-  loadHistory();
-}
-
-// --- pasarse a Pro (pago simulado)
-function openUpgrade() {
-  if (!plan || !plan.pro) return;
-  const pro = plan.pro;
-  const perks = [
-    `Tus audios se guardan ${plural(Math.round(pro.minutos_guardado / 1440), "día", "días")} y quedan en "Mis audios".`,
-    `Hasta ${pro.trabajos_por_mes} audios cada ${pro.dias_periodo} días.`,
-    `Audios de hasta ${pro.minutos_max_audio} minutos.`,
-  ];
-  $("proPerks").innerHTML = "";
-  for (const t of perks) { const li = document.createElement("li"); li.textContent = t; $("proPerks").append(li); }
-  $("proPrice").textContent = `$${Number(pro.precio_mensual).toFixed(2)} MXN por ${pro.dias_periodo} días`;
-  $("upgradeError").hidden = true;
-  $("upgradeDone").hidden = true;
-  upgrading = true;
-  showAccount();
-  $("cardLast4").focus();
-}
-$("goPro").onclick = openUpgrade;
-$("upgradeCancel").onclick = () => { upgrading = false; showAccount(); };
-$("cardLast4").oninput = () => { $("cardLast4").value = $("cardLast4").value.replace(/\D/g, "").slice(0, 4); };
-
-$("upgradeForm").onsubmit = async (e) => {
-  e.preventDefault();
-  $("upgradeError").hidden = true;
-  $("payGo").disabled = true;
-  try {
-    const res = await fetch("/suscripcion/pro", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ marca: $("cardBrand").value, ultimos4: $("cardLast4").value }),
-    });
-    if (res.status === 401) { sessionEnded(); return; }
-    // 409: ya era Pro (por ejemplo, desde otra pestaña); igual se actualiza la página.
-    if (!res.ok && res.status !== 409) throw new Error(await errorDetail(res));
-    const r = res.ok ? await res.json() : null;
-    $("cardLast4").value = "";
-    $("cancelDone").hidden = true;
-    upgrading = false;
-    await loadPlan();
-    $("upgradeDone").textContent = r
-      ? `¡Listo! Ya tienes el plan Pro hasta el ${dateText(r.fin_periodo)} y tus próximos audios se guardan una semana en "Mis audios".`
-      : "Ya tenías el plan Pro.";
-    $("upgradeDone").hidden = false;
-    if (lastJob) $("expires").textContent = expiresText(lastJob);  // este audio sigue con lo del plan gratis
-  } catch (err) {
-    $("upgradeError").textContent = err.message || "No se pudo completar el pago. Intenta de nuevo.";
-    $("upgradeError").hidden = false;
-  } finally {
-    $("payGo").disabled = false;
-  }
-};
-
-// --- cancelar el plan Pro
-function resetCancel() {
-  $("cancelConfirm").hidden = true;
-  $("cancelPro").hidden = false;
-  $("cancelError").hidden = true;
-}
-$("cancelPro").onclick = () => { $("cancelPro").hidden = true; $("cancelConfirm").hidden = false; $("cancelNo").focus(); };
-$("cancelNo").onclick = resetCancel;
-$("cancelYes").onclick = async () => {
-  $("cancelYes").disabled = $("cancelNo").disabled = true;
-  $("cancelError").hidden = true;
-  try {
-    const res = await fetch("/suscripcion/cancelar", { method: "POST", headers: authHeaders() });
-    if (res.status === 401) { sessionEnded(); return; }
-    // 409: ya no era Pro (por ejemplo, desde otra pestaña); igual se actualiza la página.
-    if (!res.ok && res.status !== 409) throw new Error(await errorDetail(res));
-    resetCancel();
-    await loadPlan();
-    $("upgradeDone").hidden = true;
-    $("cancelDone").textContent = "Cancelaste el plan Pro. Ahora tienes el plan gratis.";
-    $("cancelDone").hidden = false;
-    if (lastJob) $("expires").textContent = expiresText(lastJob);
-  } catch (err) {
-    $("cancelError").textContent = err.message || "No se pudo cancelar. Intenta de nuevo.";
-    $("cancelError").hidden = false;
-  } finally {
-    $("cancelYes").disabled = $("cancelNo").disabled = false;
-  }
-};
-
-function presetName(preset) {
-  const m = MODES.find((x) => Object.values(x.presets).includes(preset));
-  if (!m) return preset;
-  return m.presets.best === preset ? `${m.title} (mejor calidad)` : m.title;
-}
-
-function historyState(t) {
-  if (t.estado === "en_cola" || t.estado === "procesando") return "En proceso…";
-  if (t.estado === "error") return t.mensaje_error === "Cancelado por el usuario" ? "Cancelado" : "No se pudo procesar";
-  return t.disponible && t.expira_en ? `Disponible hasta el ${dateText(t.expira_en)}` : "Ya no está disponible";
-}
-
-async function loadHistory() {
-  if (!hasHistory()) return;
-  $("proUntil").textContent = `Plan Pro hasta el ${dateText(plan.fin_periodo)} · `;
-  const days = Math.round(plan.minutos_guardado / 1440);
-  $("historyNote").textContent = `Con el plan Pro tus audios se guardan ${plural(days, "día", "días")}. Ábrelos para escucharlos o descargarlos otra vez.`;
-  $("historyError").hidden = true;
-  let items;
-  try {
-    const res = await fetch("/trabajos", { headers: authHeaders() });
-    if (res.status === 401) { sessionEnded(); return; }
-    if (res.status === 403) { plan.historial = false; showAccount(); return; }  // el plan pro venció
-    if (!res.ok) throw new Error(await errorDetail(res));
-    items = await res.json();
-  } catch (err) {
-    $("historyError").textContent = err.message || "No se pudo cargar tu historial.";
-    $("historyError").hidden = false;
-    return;
-  }
-  const list = $("historyList");
-  list.innerHTML = "";
-  if (!items.length) {
-    list.innerHTML = '<p class="muted">Todavía no tienes audios. Aquí aparecerán los que proceses.</p>';
-    return;
-  }
-  for (const t of items) {
-    const row = document.createElement("div");
-    row.className = "history-item";
-    row.innerHTML = '<div><strong></strong><span class="muted"></span></div>';
-    row.querySelector("strong").textContent = t.nombre_original;
-    const when = t.creado_en ? dateText(t.creado_en) : "";
-    row.querySelector("span").textContent = [presetName(t.preset), when, historyState(t)].filter(Boolean).join(" · ");
-    if (t.estado === "completado" && t.disponible) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = lastJob && lastJob.id === t.id ? "Abierto" : "Abrir";
-      b.disabled = busy || (lastJob && lastJob.id === t.id);
-      b.onclick = () => openFromHistory(t.id);
-      row.append(b);
-    }
-    list.append(row);
-  }
-}
-
-async function openFromHistory(id) {
-  if (busy) return;
-  $("historyError").hidden = true;
-  showError("");
-  if (!(await openJob(id))) {
-    $("historyError").textContent = "Este audio ya no está disponible.";
-    $("historyError").hidden = false;
-  }
-  loadHistory();
-}
-
-let registering = false;
-function setRegistering(on) {
-  registering = on;
-  $("nameField").hidden = !on;
-  $("authTitle").textContent = on ? "Crea tu cuenta" : "Inicia sesión";
-  $("authGo").textContent = on ? "Crear cuenta" : "Entrar";
-  $("authSwitch").textContent = on ? "Ya tengo cuenta" : "Crear una cuenta";
-  $("authError").hidden = true;
-}
-$("authSwitch").onclick = () => setRegistering(!registering);
-
-async function postJson(url, body) {
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(await errorDetail(res));
-  return res.json();
-}
-
-$("authForm").onsubmit = async (e) => {
-  e.preventDefault();
-  $("authError").hidden = true;
-  $("authGo").disabled = true;
-  const email = $("authEmail").value, password = $("authPassword").value;
-  try {
-    if (registering) await postJson("/auth/registro", { email, nombre: $("authName").value, password });
-    const s = await postJson("/auth/login", { email, password });
-    saveSession(s.token, s.nombre);
-    $("authPassword").value = "";
-    setRegistering(false);
-    showAccount();
-    loadPlan();
-  } catch (err) {
-    $("authError").textContent = err.message || "No se pudo completar. Intenta de nuevo.";
-    $("authError").hidden = false;
-  } finally {
-    $("authGo").disabled = false;
-  }
-};
-
-$("logout").onclick = async () => {
-  try { await fetch("/auth/logout", { method: "POST", headers: authHeaders() }); } catch {}
-  sessionEnded();
-};
-
-// --- configuración
-async function loadConfig() {
-  try {
-    const res = await fetch("/api/config");
-    if (!res.ok) throw new Error();
-    cfg = await res.json();
-  } catch {
-    showError("No pudimos conectar con el servidor. Recarga la página en unos minutos.");
-    return;
-  }
-  const common = ["mp3", "wav", "m4a", "flac"].filter((e) => cfg.accepted_extensions.includes("." + e));
-  const formats = common.map((e) => e.toUpperCase()).join(", ") + (cfg.accepted_extensions.length > common.length ? " y otros" : "");
-  $("limits").textContent = `${formats} · hasta ${cfg.max_upload_mb} MB`;
-  $("file").accept = cfg.accepted_extensions.join(",");
-
-  for (const f of cfg.output_formats) $("format").add(new Option(FORMAT_NAMES[f] || f.toUpperCase(), f));
-  $("format").value = cfg.output_formats.includes("mp3") ? "mp3" : cfg.output_formats[0];
-
-  for (const m of MODES) {
-    m.presets = Object.fromEntries(Object.entries(m.presets).filter(([, p]) => cfg.presets[p]));
-    if (!Object.keys(m.presets).length) continue;
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "mode"; b.dataset.mode = m.id; b.setAttribute("aria-pressed", "false");
-    b.innerHTML = "<strong></strong><span></span>";
-    b.querySelector("strong").textContent = m.title;
-    b.querySelector("span").textContent = m.text;
-    b.onclick = () => selectMode(m);
-    $("modes").append(b);
-  }
-  updateButton();
-}
-
-// --- paso 1: qué hacer
-function currentPreset() {
-  if (!mode) return null;
-  const speed = document.querySelector("input[name=speed]:checked").value;
-  return mode.presets[speed] || mode.presets.fast || Object.values(mode.presets)[0];
-}
-
-function selectMode(m) {
-  mode = m;
-  for (const b of $("modes").children) b.setAttribute("aria-pressed", String(b.dataset.mode === m.id));
-  $("speed").hidden = !(m.presets.fast && m.presets.best);
-  $("go").textContent = m.button;
-  renderTracks();
-}
-for (const r of document.querySelectorAll("input[name=speed]")) r.onchange = renderTracks;
-
-// --- paso 3: pistas
-function renderTracks() {
-  if (!mode) return;
-  const stems = cfg.presets[currentPreset()].stems;
-  $("tracks").innerHTML = "";
-  for (const s of stems) {
-    const l = document.createElement("label");
-    l.innerHTML = '<input type="checkbox" checked> <span></span>';
-    l.querySelector("input").value = s;
-    l.querySelector("span").textContent = trackName(s);
-    $("tracks").append(l);
-  }
-  // Con una sola pista no hay nada que elegir.
-  $("tracksBox").hidden = stems.length < 2;
-  updateButton();
-}
-$("tracks").onchange = updateButton;
-function selectedTracks() { return [...$("tracks").querySelectorAll("input:checked")].map((c) => c.value); }
-
-function updateButton() {
-  let hint = "";
-  if (!mode) hint = "Elige qué quieres hacer.";
-  else if (!file) hint = "Sube un archivo de audio.";
-  else if (!selectedTracks().length) hint = "Elige al menos una pista.";
-  $("hint").textContent = busy ? "" : hint;
-  $("go").disabled = busy || !!hint || !cfg;
-}
-
-// --- paso 2: archivo
-function readDuration(f) {
-  // Solo para mostrarla: el límite de cada plan lo revisa el servidor.
-  return new Promise((resolve) => {
-    const a = document.createElement("audio");
-    const url = URL.createObjectURL(f);
-    const done = (v) => { URL.revokeObjectURL(url); resolve(v); };
-    a.preload = "metadata";
-    a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : null);
-    a.onerror = () => done(null);
-    setTimeout(() => done(null), 5000);
-    a.src = url;
-  });
-}
-
-let fileSeq = 0;  // si se eligen dos archivos seguidos, gana el último
-async function setFile(f) {
-  const seq = ++fileSeq;
-  showError("");
-  file = null; $("fileName").textContent = "";
-  updateButton();
-  if (!f || !cfg) return;
-  const ext = f.name.includes(".") ? "." + f.name.split(".").pop().toLowerCase() : "";
-  if (!cfg.accepted_extensions.includes(ext)) {
-    showError(`Ese tipo de archivo no se puede usar. Prueba con ${cfg.accepted_extensions.map((e) => e.slice(1).toUpperCase()).join(", ")}.`);
-    return;
-  }
-  if (f.size > cfg.max_upload_mb * 1048576) {
-    showError(`El archivo pesa ${(f.size / 1048576).toFixed(0)} MB y el máximo es ${cfg.max_upload_mb} MB.`);
-    return;
-  }
-  const sec = await readDuration(f);
-  if (seq !== fileSeq) return;
-  file = f;
-  $("fileName").textContent = sec ? `${f.name} · ${minutes(sec)}` : f.name;
-  updateButton();
-}
-$("pick").onclick = (e) => { e.stopPropagation(); $("file").click(); };
-$("drop").onclick = () => $("file").click();
-$("drop").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
-$("file").onchange = () => { setFile($("file").files[0]); $("file").value = ""; };
-$("drop").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("over"); };
-$("drop").ondragleave = () => $("drop").classList.remove("over");
-$("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("over");
-  // Un texto o un enlace arrastrado no trae archivo: se deja el que había.
-  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-};
-
-// --- subir y seguir el progreso
-function upload(fd) {
-  // XMLHttpRequest y no fetch: fetch no informa el avance de la subida.
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/jobs");
-    if (token()) xhr.setRequestHeader("Authorization", `Bearer ${token()}`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) setBar(e.loaded / e.total, `Subiendo tu archivo… ${Math.round((e.loaded / e.total) * 100)}%`, "");
-    };
-    xhr.onload = () => {
-      let body = null;
-      try { body = JSON.parse(xhr.responseText); } catch {}
-      if (xhr.status === 401) sessionEnded();
-      if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body);
-      else if (body && typeof body.detail === "string") reject(new Error(body.detail));
-      else reject(new Error(xhr.status >= 500 ? "El servidor tuvo un problema. Intenta de nuevo en unos minutos." : "No se pudo subir el archivo. Intenta de nuevo."));
-    };
-    xhr.onerror = () => reject(new Error("Se perdió la conexión al subir el archivo. Revisa tu internet e intenta de nuevo."));
-    xhr.send(fd);
-  });
-}
-
-// Se recuerda el trabajo para retomarlo si se recarga la página.
-const SAVED_JOB = "splitter:trabajo";
-function saveJob(id) { try { id ? localStorage.setItem(SAVED_JOB, id) : localStorage.removeItem(SAVED_JOB); } catch {} }
-function savedJob() { try { return localStorage.getItem(SAVED_JOB); } catch { return null; } }
-
-function discardJob() {
-  // Con el plan pro el trabajo se queda en "Mis audios"; sin él, se borra al pasar a otro.
-  if (lastJob && !hasHistory()) fetch(`/api/jobs/${lastJob.id}`, { method: "DELETE", keepalive: true, headers: authHeaders() }).catch(() => {});
-  lastJob = null;
-  saveJob(null);
-}
-
-$("go").onclick = async () => {
-  showError("");
-  busy = true; updateButton();
-  clearTracks();
-  discardJob();
-  $("results").hidden = true;
-  $("progress").hidden = false;
-  setBar(0, "Subiendo tu archivo…", "");
-
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("preset", currentPreset());
-  fd.append("stems", selectedTracks().join(","));
-
-  let job;
-  try { job = await upload(fd); }
-  catch (e) { $("progress").hidden = true; showError(e.message); busy = false; updateButton(); return; }
-
-  saveJob(job.id);
-  showJob(job);
-  follow(job.id);
-  loadHistory();
-};
-
-function follow(id) {
-  es = new EventSource(`/api/jobs/${id}/events`);
-  es.addEventListener("update", (ev) => {
-    const j = JSON.parse(ev.data);
-    showJob(j);
-    if (j.status === "done") { finish(); showResults(j); loadHistory(); }
-    else if (j.status === "error") { finish(); saveJob(null); $("progress").hidden = true; showError(j.error || "No se pudo procesar el audio. Intenta de nuevo."); loadHistory(); }
-  });
-  es.addEventListener("gone", () => { finish(); saveJob(null); $("progress").hidden = true; showError("Este trabajo ya no está disponible. Vuelve a subir el archivo."); });
-  es.onerror = () => {
-    if (es && es.readyState === EventSource.CLOSED) { finish(); showError("Se perdió la conexión con el servidor. Recarga la página e intenta de nuevo."); }
-  };
-}
-
-async function resumeJob() {
-  const id = savedJob();
-  if (id) await openJob(id);
-}
-
-// Muestra un trabajo: el de antes de recargar la página o uno de "Mis audios". Devuelve si se pudo.
-async function openJob(id) {
-  if (!cfg) return false;
-  let j;
-  try {
-    const res = await fetch(`/api/jobs/${id}`, { headers: authHeaders() });
-    if (res.status === 401) { sessionEnded(); return false; }
-    if (!res.ok) { if (savedJob() === id) saveJob(null); return false; }  // ya expiró o el servidor se reinició
-    j = await res.json();
-  } catch { return false; }
-  if (j.status === "error") { if (savedJob() === id) saveJob(null); return false; }
-  const m = MODES.find((x) => Object.values(x.presets).includes(j.preset));
-  if (m) {
-    const speed = Object.keys(m.presets).find((k) => m.presets[k] === j.preset);
-    const radio = document.querySelector(`input[name=speed][value="${speed}"]`);
-    if (radio) radio.checked = true;
-    selectMode(m);
-  }
-  if (j.status === "done") { showResults(j); return true; }
-  busy = true; updateButton();
-  saveJob(j.id);
-  $("results").hidden = true;
-  $("progress").hidden = false;
-  showJob(j);
-  follow(j.id);
-  return true;
-}
-
-function finish() { if (es) { es.close(); es = null; } busy = false; updateButton(); }
-
-function setBar(fraction, status, detail) {
-  const bar = $("bar"), fill = bar.firstElementChild;
-  bar.classList.toggle("indet", fraction == null);
-  fill.style.width = fraction == null ? "" : `${Math.round(fraction * 100)}%`;
-  fill.style.background = "";
-  $("status").textContent = status;
-  $("detail").textContent = detail;
-}
-
-function showJob(j) {
-  if (j.status === "queued") {
-    const pos = j.queue_position;
-    const ahead = pos ? pos - 1 : 0;
-    const detail = ahead === 0 ? "Eres el siguiente." : `Hay ${ahead} ${ahead === 1 ? "persona" : "personas"} antes que tú.`;
-    setBar(null, "Esperando turno…", detail);
-  } else if (j.status === "processing" && j.phase === "waiting_gpu") {
-    setBar(null, "Esperando GPU…", "Los servidores están ocupados. Si en unos minutos no hay GPU, te avisamos.");
-  } else if (j.status === "processing") {
-    const pct = j.progress ?? null;
-    const action = mode && mode.id === "podcast" ? "Limpiando tu audio" : "Separando tu audio";
-    setBar(pct, pct == null ? `${action}…` : `${action}… ${Math.round(pct * 100)}%`,
-           "Puedes dejar esta página abierta mientras termina.");
-  } else if (j.status === "done") {
-    setBar(1, "¡Listo!", "");
-    $("bar").firstElementChild.style.background = "var(--ok)";
-  }
-}
-
-// --- reproductor
-// El volumen va por Web Audio porque en iPhone `audio.volume` no se puede cambiar.
-const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
-const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>';
-let actx = null, tracks = [], playing = false, syncTimer = null, dragging = false;
-
-function setPlaying(on) {
-  playing = on;
-  $("playAll").innerHTML = on ? PAUSE_ICON : PLAY_ICON;
-  $("playAll").setAttribute("aria-label", on ? "Pausar" : "Reproducir");
-  clearInterval(syncTimer);
-  syncTimer = on ? setInterval(sync, 250) : null;
-}
-
-function connectAudio() {
-  // Se crea en el primer play: los navegadores no dejan sonar nada antes de un clic.
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!Ctx) return;  // sin Web Audio el volumen queda en audio.volume
-  if (!actx) actx = new Ctx();
-  for (const t of tracks) {
-    if (t.gain) continue;
-    t.source = actx.createMediaElementSource(t.audio);
-    t.gain = actx.createGain();
-    t.gain.gain.value = t.vol;
-    t.source.connect(t.gain).connect(actx.destination);
-  }
-  if (actx.state === "suspended") actx.resume();
-}
-
-function setVolume(t, v) {
-  t.vol = v;
-  if (t.gain) t.gain.gain.value = v; else t.audio.volume = v;
-}
-
-async function playAll() {
-  connectAudio();
-  const at = tracks[0].audio.currentTime;
-  for (const t of tracks) if (Math.abs(t.audio.currentTime - at) > 0.01) t.audio.currentTime = at;
-  setPlaying(true);
-  try {
-    await Promise.all(tracks.map((t) => t.audio.play()));
-    $("playerStatus").textContent = "";
-  } catch (err) {
-    // AbortError: se pausó antes de arrancar (el usuario, o mientras otra pista carga).
-    if (err && err.name === "AbortError") return;
-    pauseAll();
-    $("playerStatus").textContent = "No se pudo reproducir. Intenta de nuevo.";
-  }
-}
-
-function pauseAll() { for (const t of tracks) t.audio.pause(); setPlaying(false); }
-
-function seekAll(sec) { for (const t of tracks) t.audio.currentTime = sec; showTime(sec); }
-
-function showTime(sec) {
-  $("timeNow").textContent = minutes(sec);
-  if (!dragging) $("seek").value = sec;
-}
-
-function sync() {
-  // Cada pista lleva su propio reloj: la que se desfasa se alinea con la primera.
-  const lead = tracks[0].audio;
-  for (const t of tracks.slice(1)) {
-    if (!t.audio.paused && Math.abs(t.audio.currentTime - lead.currentTime) > 0.08) t.audio.currentTime = lead.currentTime;
-  }
-  showTime(lead.currentTime);
-}
-
-function addTrack(s) {
-  const name = trackName(s.name);
-  const div = document.createElement("div");
-  div.className = "track";
-  div.innerHTML = '<strong></strong><input type="range" min="0" max="100" value="100"><span class="vol">100%</span><a class="btn" download>Descargar</a>';
-  div.querySelector("strong").textContent = name;
-  const audio = new Audio();
-  audio.preload = "auto";
-  audio.src = s.preview_url;
-  const t = { audio, vol: 1, gain: null, source: null };
-  const range = div.querySelector("input");
-  range.setAttribute("aria-label", `Volumen de ${name}`);
-  range.oninput = () => { setVolume(t, range.value / 100); div.querySelector(".vol").textContent = `${range.value}%`; };
-  const link = div.querySelector("a");
-  link.dataset.base = s.download_url;
-  link.onclick = prepareDownload;
-  // Si una pista se queda cargando, las demás la esperan para no desfasarse.
-  audio.addEventListener("waiting", () => { if (playing) for (const o of tracks) if (o !== t) o.audio.pause(); });
-  audio.addEventListener("playing", () => {
-    if (playing) for (const o of tracks) if (o.audio.paused) { o.audio.currentTime = audio.currentTime; o.audio.play().catch(() => {}); }
-  });
-  tracks.push(t);
-  $("trackList").append(div);
-  return t;
-}
-
-function loaded(audio) {
-  return new Promise((resolve, reject) => {
-    if (audio.readyState >= 1) return resolve();
-    audio.addEventListener("loadedmetadata", resolve, { once: true });
-    audio.addEventListener("error", reject, { once: true });
-  });
-}
-
-function clearTracks() {
-  // Un audio que ya no se ve sigue sonando si no se para.
-  setPlaying(false);
-  for (const t of tracks) {
-    t.audio.pause();
-    if (t.source) { t.source.disconnect(); t.gain.disconnect(); }
-    t.audio.removeAttribute("src");
-    t.audio.load();
-  }
-  tracks = [];
-  $("trackList").innerHTML = "";
-  $("seek").max = 0; $("seek").value = 0;
-  $("timeNow").textContent = $("timeTotal").textContent = "0:00";
-  $("playAll").disabled = $("seek").disabled = true;
-}
-
-$("playAll").onclick = () => (playing ? pauseAll() : playAll());
-$("seek").addEventListener("pointerdown", () => { dragging = true; });
-// Un clic sin mover la barra no dispara "change": sin esto se quedaría congelada.
-for (const ev of ["pointerup", "pointercancel"]) $("seek").addEventListener(ev, () => { dragging = false; });
-$("seek").addEventListener("input", () => { $("timeNow").textContent = minutes(+$("seek").value); });
-$("seek").addEventListener("change", () => { dragging = false; seekAll(+$("seek").value); });
-
-// --- resultados
-function showResults(j) {
-  lastJob = j;
-  saveJob(j.id);
-  clearTracks();
-  showResultsError("");
-  for (const s of j.stems) addTrack(s);
-  const mine = tracks;
-  tracks[0]?.audio.addEventListener("ended", () => { pauseAll(); seekAll(0); });
-  $("playerStatus").textContent = "Cargando pistas…";
-  Promise.all(mine.map((t) => loaded(t.audio))).then(() => {
-    if (tracks !== mine) return;  // ya se pasó a otro audio
-    const total = Math.max(...mine.map((t) => t.audio.duration || 0));
-    $("seek").max = total;
-    $("timeTotal").textContent = minutes(total);
-    $("playAll").disabled = $("seek").disabled = false;
-    $("playerStatus").textContent = "";
-  }, () => {
-    if (tracks === mine) $("playerStatus").textContent = "No se pudo cargar la vista previa. Puedes descargar las pistas igual.";
-  });
-  $("zip").hidden = j.stems.length < 2;
-  $("expires").textContent = expiresText(j);
-  updateLinks();
-  $("progress").hidden = true;
-  $("results").hidden = false;
-  $("results").scrollIntoView({ behavior: "smooth", block: "start" });
-}
-function expiresText(j) {
-  // Desde la fecha, para que siga siendo cierto si se vuelve a calcular más tarde.
-  const n = j.expires_at ? Math.max(0, Math.round((parseDate(j.expires_at) - Date.now()) / 60000)) : j.expires_in_minutes;
-  if (!n) return "";
-  // Pro: una semana y quedan en "Mis audios". Gratis e invitados: 1 hora.
-  if (n > 120 && j.expires_at) {
-    const date = dateText(j.expires_at);
-    return hasHistory()
-      ? `Tus archivos se guardan hasta el ${date} y también los encuentras en Mis audios.`
-      : `Tus archivos se guardan hasta el ${date}; descárgalos antes.`;  // era Pro y ya canceló
-  }
-  let text = `Tus archivos se borran automáticamente en ${plural(n, "minuto", "minutos")}. Descárgalos antes.`;
-  if (plan && plan.plan !== "pro") text += " Con el plan Pro se guardan una semana y quedan en tu historial.";
-  return text;
-}
-
-function updateLinks() {
-  if (!lastJob) return;
-  const fmt = $("format").value;
-  for (const a of $("trackList").querySelectorAll("a")) a.href = `${a.dataset.base}?format=${fmt}`;
-  $("zip").href = `${lastJob.download_all_url}?format=${fmt}`;
-}
-$("format").onchange = updateLinks;
-
-function showResultsError(msg) { $("resultsError").textContent = msg || ""; $("resultsError").hidden = !msg; }
-
-async function prepareDownload(e) {
-  // El servidor convierte el formato la primera vez (puede tardar): primero prepare=1, luego descarga.
-  e.preventDefault();
-  const a = e.currentTarget;
-  if (a.getAttribute("aria-disabled") === "true") return;
-  const label = a.textContent;
-  a.textContent = "Preparando…";
-  a.setAttribute("aria-disabled", "true");
-  showResultsError("");
-  try {
-    const res = await fetch(`${a.href}&prepare=1`);
-    if (!res.ok) throw new Error(await errorDetail(res));
-    const link = document.createElement("a");
-    link.href = a.href;
-    link.download = "";
-    document.body.append(link);
-    link.click();
-    link.remove();
-  } catch (err) {
-    showResultsError(err.message || "No se pudo preparar la descarga. Intenta de nuevo.");
-  } finally {
-    a.textContent = label;
-    a.removeAttribute("aria-disabled");
-  }
-}
-$("zip").onclick = prepareDownload;
-
-$("again").onclick = () => {
-  clearTracks();
-  discardJob();
-  $("results").hidden = true;
-  setFile(null);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-};
-
-setPlaying(false);
-showAccount();
-loadConfig().then(() => { updateLimits(); resumeJob(); loadPlan(); });
-</script>
+    <footer class="workspace-footer"><span>Menos ruido. Más posibilidades.</span><span class="footer-label">Hecho para escuchar</span></footer>  </main>
+
+  <dialog id="login-dialog" class="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div id="login-scrim" class="login-scrim"></div>
+    <div id="login-panel" class="login-panel">
+    <form id="login-form" class="login-form" novalidate>
+      <button id="login-close" type="button" class="dialog-close" aria-label="Cerrar">×</button>
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="brand-word">Splitter</span>
+      </div>
+      <p class="eyebrow">Tu cuenta</p>
+      <h2 id="login-title">Inicia sesión</h2>
+      <p id="login-lead" class="login-lead">Guarda tus separaciones y vuelve a ellas cuando quieras.</p>
+      <label id="name-field" class="field" for="login-name" hidden><span>Nombre</span><input id="login-name" name="nombre" type="text" autocomplete="name" maxlength="100"></label>
+      <label class="field" for="login-email"><span>Correo electrónico</span><input id="login-email" name="email" type="email" autocomplete="email" inputmode="email" required></label>
+      <div id="password-fields" class="login-fields">
+        <label class="field" for="login-password"><span>Contraseña</span><input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+        <label id="confirm-field" class="field" for="login-confirm" hidden><span>Repite la contraseña</span><input id="login-confirm" name="confirm" type="password" autocomplete="new-password"></label>
+        <button id="forgot-link" type="button" class="link-button" data-mode-target="reset">Olvidé mi contraseña</button>
+      </div>
+      <p id="login-message" class="login-message" role="alert" hidden></p>
+      <button id="login-submit" class="primary-button login-submit" type="submit">Iniciar sesión</button>
+      <div id="social-auth" class="social-auth">
+        <p class="social-divider"><span>o continúa con</span></p>
+        <div class="social-row">
+          <button type="button" class="social-button" data-provider="google" aria-label="Continuar con Google"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg><span class="social-name">Google</span></button>
+          <button type="button" class="social-button" data-provider="apple" aria-label="Continuar con Apple"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg><span class="social-name">Apple</span></button>
+          <button type="button" class="social-button" data-provider="facebook" aria-label="Continuar con Facebook"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg><span class="social-name">Facebook</span></button>
+        </div>
+      </div>
+      <p class="login-switch"><span id="switch-text">¿No tienes cuenta?</span> <button id="switch-link" type="button" class="link-button" data-mode-target="register">Crear cuenta</button></p>
+    </form>
+    </div>
+  </dialog>
 </body>
 </html>
