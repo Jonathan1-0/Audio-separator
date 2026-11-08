@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planes — Splitter</title>
+  <meta name="description" content="Elige el plan de Splitter: Gratis o Pro.">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="account.js" defer></script>
+  <script src="plans.js" defer></script>
+</head>
+<body class="plans-page">
+  <main id="planes" class="plans" aria-labelledby="plans-title">
+    <div class="plans-bg" aria-hidden="true"></div>
+    <svg class="plans-mark" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg>
+
+    <header class="plans-header">
+      <a class="back-link" href="index.html"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Volver</a>
+      <a class="brand" href="index.html" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
+    </header>
+
+    <div class="plans-inner">
+      <p class="eyebrow">Planes</p>
+      <h1 id="plans-title" class="plans-title">Elige tu plan</h1>
+      <p class="plans-lead">Empieza gratis. Pasa a Pro cuando necesites audios más largos y mejor calidad.</p>
+      <div class="billing" role="radiogroup" aria-label="Facturación">
+        <span class="billing-thumb" aria-hidden="true"></span>
+        <button type="button" class="billing-option" role="radio" data-billing="mensual" aria-checked="true">Mensual</button>
+        <button type="button" class="billing-option" role="radio" data-billing="anual" aria-checked="false">Anual <small id="billing-save"></small></button>
+      </div>
+      <div id="plans-grid" class="plans-grid"></div>
+    </div>
+  </main>
+</body>
+</html>
