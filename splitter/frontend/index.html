@@ -76,7 +76,28 @@
 
   /* Cuenta */
   .account { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
+  .badge { font-size:12px; border:1px solid var(--line); border-radius:999px; padding:1px 8px; color:var(--muted); }
+  .badge.pro { border-color:var(--accent); color:var(--accent); }
   #auth label { display:block; margin-top:10px; }
+
+  /* Pasarse a Pro */
+  #upgrade ul { margin:8px 0 0; padding-left:20px; }
+  #upgrade label { display:block; margin-top:10px; }
+  #upgrade select, #upgrade input { display:block; width:100%; max-width:260px; font:inherit; color:var(--text);
+                                    background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:4px; }
+  .price { font-size:22px; font-weight:700; margin:12px 0 0; }
+  .notice { background:#5b9dff14; border:1px solid #5b9dff55; border-radius:6px; padding:10px 12px; margin-top:12px; font-size:13px; }
+  .success { color:var(--ok); background:#4cc38a18; border:1px solid #4cc38a55; border-radius:6px; padding:10px 12px; margin-top:12px; }
+
+  /* Mis audios (plan pro) */
+  .history-item { display:flex; gap:12px; align-items:center; justify-content:space-between; border-top:1px solid var(--line); padding:10px 0; }
+  .history-item:first-child { border-top:0; }
+  .history-item div { min-width:0; }
+  .history-item strong { display:block; word-break:break-word; }
+  .history-item button { flex:none; }
+  .plan-box { border-top:1px solid var(--line); margin-top:14px; padding-top:14px; }
+  .plan-box .actions { margin-top:10px; }
+  button.danger { border-color:#ff6b6b88; color:var(--err); }
   #auth input { display:block; width:100%; font:inherit; color:var(--text); background:var(--panel2);
                 border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:4px; }
 </style>
@@ -88,6 +109,8 @@
 
   <div class="account" id="account">
     <span class="muted" id="accountName"></span>
+    <span class="badge" id="planBadge" hidden></span>
+    <button type="button" id="goPro" hidden>Pasarse a Pro</button>
     <button type="button" id="logout" hidden>Cerrar sesión</button>
     <button type="button" id="login">Iniciar sesión</button>
   </div>
@@ -106,6 +129,31 @@
     </form>
     <div class="error" id="authError" hidden></div>
   </section>
+
+  <section id="upgrade" hidden>
+    <h2>Pásate al plan Pro</h2>
+    <ul id="proPerks"></ul>
+    <p class="price" id="proPrice"></p>
+    <div class="notice">Pago de prueba: el proyecto todavía no cobra. No escribas el número completo de tu tarjeta, solo la marca y los últimos 4 dígitos.</div>
+    <form id="upgradeForm">
+      <label>Tarjeta
+        <select id="cardBrand">
+          <option value="Visa">Visa</option>
+          <option value="Mastercard">Mastercard</option>
+          <option value="American Express">American Express</option>
+        </select>
+      </label>
+      <label>Últimos 4 dígitos
+        <input id="cardLast4" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" placeholder="1234" required>
+      </label>
+      <div class="actions">
+        <button class="primary" id="payGo">Contratar Pro</button>
+        <button type="button" id="upgradeCancel">Ahora no</button>
+      </div>
+    </form>
+    <div class="error" id="upgradeError" hidden></div>
+  </section>
+  <div class="success" id="upgradeDone" hidden></div>
 
   <section id="setup" hidden>
     <h2><span class="step">1</span>¿Qué quieres hacer?</h2>
@@ -165,6 +213,28 @@
     <p class="muted" id="expires"></p>
     <button type="button" id="again">Procesar otro audio</button>
   </section>
+
+  <section id="history" hidden>
+    <h2>Mis audios</h2>
+    <p class="muted" id="historyNote"></p>
+    <div id="historyList"></div>
+    <div class="error" id="historyError" hidden></div>
+    <div class="plan-box">
+      <span class="muted" id="proUntil"></span>
+      <button type="button" id="cancelPro">Cancelar plan Pro</button>
+      <div id="cancelConfirm" hidden>
+        <p><strong>¿Seguro que quieres cancelar el plan Pro?</strong></p>
+        <p class="muted">Pasas al plan gratis desde ahora. No se devuelve lo que pagaste, dejas de ver «Mis audios»
+          y tus próximos audios se guardan solo 1 hora.</p>
+        <div class="actions">
+          <button type="button" class="danger" id="cancelYes">Sí, cancelar</button>
+          <button type="button" id="cancelNo">No, seguir con Pro</button>
+        </div>
+      </div>
+      <div class="error" id="cancelError" hidden></div>
+    </div>
+  </section>
+  <div class="success" id="cancelDone" hidden></div>
 </main>
 
 <script>
@@ -187,6 +257,8 @@ const FORMAT_NAMES = {
 const trackName = (s) => TRACK_NAMES[s] || s;
 
 let cfg = null, file = null, mode = null, es = null, lastJob = null, busy = false;
+let plan = null;  // plan de la cuenta (GET /suscripcion); null sin cuenta
+const hasHistory = () => !!(plan && plan.historial);
 
 function showError(msg) { $("error").textContent = msg || ""; $("error").hidden = !msg; }
 
@@ -197,6 +269,10 @@ async function errorDetail(res) {
 }
 
 function minutes(sec) { return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`; }
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// El servidor manda fechas UTC con microsegundos; algunos navegadores solo aceptan 3 decimales.
+const parseDate = (iso) => new Date(iso.replace(/(\.\d{3})\d+/, "$1"));
+const dateText = (iso) => parseDate(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 // --- cuenta
 const SAVED_TOKEN = "splitter:token", SAVED_NAME = "splitter:nombre";
@@ -212,13 +288,28 @@ function saveSession(tok, name) {
 }
 
 // La página se puede usar sin cuenta; el formulario de sesión solo se abre con el botón.
+let upgrading = false;  // formulario de "Pasarse a Pro" abierto
+
 function showAccount(openForm = false) {
   const on = !!token();
-  $("auth").hidden = on || !openForm;
-  $("setup").hidden = !on && openForm;
+  if (!on || hasHistory()) upgrading = false;
+  const formOpen = (!on && openForm) || upgrading;
+  $("auth").hidden = on || !formOpen;
+  $("upgrade").hidden = !upgrading;
+  $("setup").hidden = formOpen;
+  // Con el formulario abierto no se ve lo de atrás; al cerrarlo vuelve lo que estaba.
+  $("progress").hidden = formOpen || !busy;
+  $("results").hidden = formOpen || !lastJob;
+  $("history").hidden = formOpen || !hasHistory();
   $("login").hidden = on;
   $("logout").hidden = !on;
   try { $("accountName").textContent = on ? localStorage.getItem(SAVED_NAME) : "Sin cuenta"; } catch {}
+  $("planBadge").hidden = !(on && plan);
+  $("goPro").hidden = !(on && plan && plan.plan !== "pro") || upgrading;
+  if (plan) {
+    $("planBadge").textContent = plan.plan === "pro" ? "Plan Pro" : "Plan gratis";
+    $("planBadge").classList.toggle("pro", plan.plan === "pro");
+  }
   updateLimits();
 }
 
@@ -234,10 +325,180 @@ $("login").onclick = () => { setRegistering(false); showAccount(true); };
 $("authCancel").onclick = () => showAccount(false);
 
 function sessionEnded() {
+  // El trabajo era de la cuenta: deja de seguirse y no se muestra.
+  finish();
   saveSession(null);
   saveJob(null);
   lastJob = null;
+  plan = null;
+  upgrading = false;
+  $("upgradeDone").hidden = $("cancelDone").hidden = true;
+  resetCancel();
+  $("historyList").innerHTML = "";
+  clearTracks();
   showAccount();
+}
+
+// --- plan y "Mis audios" (solo plan pro)
+async function loadPlan() {
+  if (!token()) { plan = null; showAccount(); return; }
+  try {
+    const res = await fetch("/suscripcion", { headers: authHeaders() });
+    if (res.status === 401) { sessionEnded(); return; }
+    if (!res.ok) return;
+    plan = await res.json();
+  } catch { return; }
+  showAccount();
+  loadHistory();
+}
+
+// --- pasarse a Pro (pago simulado)
+function openUpgrade() {
+  if (!plan || !plan.pro) return;
+  const pro = plan.pro;
+  const perks = [
+    `Tus audios se guardan ${plural(Math.round(pro.minutos_guardado / 1440), "día", "días")} y quedan en "Mis audios".`,
+    `Hasta ${pro.trabajos_por_mes} audios cada ${pro.dias_periodo} días.`,
+    `Audios de hasta ${pro.minutos_max_audio} minutos.`,
+  ];
+  $("proPerks").innerHTML = "";
+  for (const t of perks) { const li = document.createElement("li"); li.textContent = t; $("proPerks").append(li); }
+  $("proPrice").textContent = `$${Number(pro.precio_mensual).toFixed(2)} MXN por ${pro.dias_periodo} días`;
+  $("upgradeError").hidden = true;
+  $("upgradeDone").hidden = true;
+  upgrading = true;
+  showAccount();
+  $("cardLast4").focus();
+}
+$("goPro").onclick = openUpgrade;
+$("upgradeCancel").onclick = () => { upgrading = false; showAccount(); };
+$("cardLast4").oninput = () => { $("cardLast4").value = $("cardLast4").value.replace(/\D/g, "").slice(0, 4); };
+
+$("upgradeForm").onsubmit = async (e) => {
+  e.preventDefault();
+  $("upgradeError").hidden = true;
+  $("payGo").disabled = true;
+  try {
+    const res = await fetch("/suscripcion/pro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ marca: $("cardBrand").value, ultimos4: $("cardLast4").value }),
+    });
+    if (res.status === 401) { sessionEnded(); return; }
+    // 409: ya era Pro (por ejemplo, desde otra pestaña); igual se actualiza la página.
+    if (!res.ok && res.status !== 409) throw new Error(await errorDetail(res));
+    const r = res.ok ? await res.json() : null;
+    $("cardLast4").value = "";
+    $("cancelDone").hidden = true;
+    upgrading = false;
+    await loadPlan();
+    $("upgradeDone").textContent = r
+      ? `¡Listo! Ya tienes el plan Pro hasta el ${dateText(r.fin_periodo)} y tus próximos audios se guardan una semana en "Mis audios".`
+      : "Ya tenías el plan Pro.";
+    $("upgradeDone").hidden = false;
+    if (lastJob) $("expires").textContent = expiresText(lastJob);  // este audio sigue con lo del plan gratis
+  } catch (err) {
+    $("upgradeError").textContent = err.message || "No se pudo completar el pago. Intenta de nuevo.";
+    $("upgradeError").hidden = false;
+  } finally {
+    $("payGo").disabled = false;
+  }
+};
+
+// --- cancelar el plan Pro
+function resetCancel() {
+  $("cancelConfirm").hidden = true;
+  $("cancelPro").hidden = false;
+  $("cancelError").hidden = true;
+}
+$("cancelPro").onclick = () => { $("cancelPro").hidden = true; $("cancelConfirm").hidden = false; $("cancelNo").focus(); };
+$("cancelNo").onclick = resetCancel;
+$("cancelYes").onclick = async () => {
+  $("cancelYes").disabled = $("cancelNo").disabled = true;
+  $("cancelError").hidden = true;
+  try {
+    const res = await fetch("/suscripcion/cancelar", { method: "POST", headers: authHeaders() });
+    if (res.status === 401) { sessionEnded(); return; }
+    // 409: ya no era Pro (por ejemplo, desde otra pestaña); igual se actualiza la página.
+    if (!res.ok && res.status !== 409) throw new Error(await errorDetail(res));
+    resetCancel();
+    await loadPlan();
+    $("upgradeDone").hidden = true;
+    $("cancelDone").textContent = "Cancelaste el plan Pro. Ahora tienes el plan gratis.";
+    $("cancelDone").hidden = false;
+    if (lastJob) $("expires").textContent = expiresText(lastJob);
+  } catch (err) {
+    $("cancelError").textContent = err.message || "No se pudo cancelar. Intenta de nuevo.";
+    $("cancelError").hidden = false;
+  } finally {
+    $("cancelYes").disabled = $("cancelNo").disabled = false;
+  }
+};
+
+function presetName(preset) {
+  const m = MODES.find((x) => Object.values(x.presets).includes(preset));
+  if (!m) return preset;
+  return m.presets.best === preset ? `${m.title} (mejor calidad)` : m.title;
+}
+
+function historyState(t) {
+  if (t.estado === "en_cola" || t.estado === "procesando") return "En proceso…";
+  if (t.estado === "error") return t.mensaje_error === "Cancelado por el usuario" ? "Cancelado" : "No se pudo procesar";
+  return t.disponible && t.expira_en ? `Disponible hasta el ${dateText(t.expira_en)}` : "Ya no está disponible";
+}
+
+async function loadHistory() {
+  if (!hasHistory()) return;
+  $("proUntil").textContent = `Plan Pro hasta el ${dateText(plan.fin_periodo)} · `;
+  const days = Math.round(plan.minutos_guardado / 1440);
+  $("historyNote").textContent = `Con el plan Pro tus audios se guardan ${plural(days, "día", "días")}. Ábrelos para escucharlos o descargarlos otra vez.`;
+  $("historyError").hidden = true;
+  let items;
+  try {
+    const res = await fetch("/trabajos", { headers: authHeaders() });
+    if (res.status === 401) { sessionEnded(); return; }
+    if (res.status === 403) { plan.historial = false; showAccount(); return; }  // el plan pro venció
+    if (!res.ok) throw new Error(await errorDetail(res));
+    items = await res.json();
+  } catch (err) {
+    $("historyError").textContent = err.message || "No se pudo cargar tu historial.";
+    $("historyError").hidden = false;
+    return;
+  }
+  const list = $("historyList");
+  list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = '<p class="muted">Todavía no tienes audios. Aquí aparecerán los que proceses.</p>';
+    return;
+  }
+  for (const t of items) {
+    const row = document.createElement("div");
+    row.className = "history-item";
+    row.innerHTML = '<div><strong></strong><span class="muted"></span></div>';
+    row.querySelector("strong").textContent = t.nombre_original;
+    const when = t.creado_en ? dateText(t.creado_en) : "";
+    row.querySelector("span").textContent = [presetName(t.preset), when, historyState(t)].filter(Boolean).join(" · ");
+    if (t.estado === "completado" && t.disponible) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = lastJob && lastJob.id === t.id ? "Abierto" : "Abrir";
+      b.disabled = busy || (lastJob && lastJob.id === t.id);
+      b.onclick = () => openFromHistory(t.id);
+      row.append(b);
+    }
+    list.append(row);
+  }
+}
+
+async function openFromHistory(id) {
+  if (busy) return;
+  $("historyError").hidden = true;
+  showError("");
+  if (!(await openJob(id))) {
+    $("historyError").textContent = "Este audio ya no está disponible.";
+    $("historyError").hidden = false;
+  }
+  loadHistory();
 }
 
 let registering = false;
@@ -269,6 +530,7 @@ $("authForm").onsubmit = async (e) => {
     $("authPassword").value = "";
     setRegistering(false);
     showAccount();
+    loadPlan();
   } catch (err) {
     $("authError").textContent = err.message || "No se pudo completar. Intenta de nuevo.";
     $("authError").hidden = false;
@@ -280,8 +542,6 @@ $("authForm").onsubmit = async (e) => {
 $("logout").onclick = async () => {
   try { await fetch("/auth/logout", { method: "POST", headers: authHeaders() }); } catch {}
   sessionEnded();
-  clearTracks();
-  $("results").hidden = true;
 };
 
 // --- configuración
@@ -375,7 +635,9 @@ function readDuration(f) {
   });
 }
 
+let fileSeq = 0;  // si se eligen dos archivos seguidos, gana el último
 async function setFile(f) {
+  const seq = ++fileSeq;
   showError("");
   file = null; $("fileName").textContent = "";
   updateButton();
@@ -390,6 +652,7 @@ async function setFile(f) {
     return;
   }
   const sec = await readDuration(f);
+  if (seq !== fileSeq) return;
   file = f;
   $("fileName").textContent = sec ? `${f.name} · ${minutes(sec)}` : f.name;
   updateButton();
@@ -400,7 +663,10 @@ $("drop").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preve
 $("file").onchange = () => { setFile($("file").files[0]); $("file").value = ""; };
 $("drop").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("over"); };
 $("drop").ondragleave = () => $("drop").classList.remove("over");
-$("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("over"); setFile(e.dataTransfer.files[0]); };
+$("drop").ondrop = (e) => { e.preventDefault(); $("drop").classList.remove("over");
+  // Un texto o un enlace arrastrado no trae archivo: se deja el que había.
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+};
 
 // --- subir y seguir el progreso
 function upload(fd) {
@@ -431,7 +697,8 @@ function saveJob(id) { try { id ? localStorage.setItem(SAVED_JOB, id) : localSto
 function savedJob() { try { return localStorage.getItem(SAVED_JOB); } catch { return null; } }
 
 function discardJob() {
-  if (lastJob) fetch(`/api/jobs/${lastJob.id}`, { method: "DELETE", keepalive: true, headers: authHeaders() }).catch(() => {});
+  // Con el plan pro el trabajo se queda en "Mis audios"; sin él, se borra al pasar a otro.
+  if (lastJob && !hasHistory()) fetch(`/api/jobs/${lastJob.id}`, { method: "DELETE", keepalive: true, headers: authHeaders() }).catch(() => {});
   lastJob = null;
   saveJob(null);
 }
@@ -457,6 +724,7 @@ $("go").onclick = async () => {
   saveJob(job.id);
   showJob(job);
   follow(job.id);
+  loadHistory();
 };
 
 function follow(id) {
@@ -464,8 +732,8 @@ function follow(id) {
   es.addEventListener("update", (ev) => {
     const j = JSON.parse(ev.data);
     showJob(j);
-    if (j.status === "done") { finish(); showResults(j); }
-    else if (j.status === "error") { finish(); saveJob(null); $("progress").hidden = true; showError(j.error || "No se pudo procesar el audio. Intenta de nuevo."); }
+    if (j.status === "done") { finish(); showResults(j); loadHistory(); }
+    else if (j.status === "error") { finish(); saveJob(null); $("progress").hidden = true; showError(j.error || "No se pudo procesar el audio. Intenta de nuevo."); loadHistory(); }
   });
   es.addEventListener("gone", () => { finish(); saveJob(null); $("progress").hidden = true; showError("Este trabajo ya no está disponible. Vuelve a subir el archivo."); });
   es.onerror = () => {
@@ -475,15 +743,20 @@ function follow(id) {
 
 async function resumeJob() {
   const id = savedJob();
-  if (!id || !cfg) return;
+  if (id) await openJob(id);
+}
+
+// Muestra un trabajo: el de antes de recargar la página o uno de "Mis audios". Devuelve si se pudo.
+async function openJob(id) {
+  if (!cfg) return false;
   let j;
   try {
     const res = await fetch(`/api/jobs/${id}`, { headers: authHeaders() });
-    if (res.status === 401) { sessionEnded(); return; }
-    if (!res.ok) { saveJob(null); return; }  // ya expiró o el servidor se reinició
+    if (res.status === 401) { sessionEnded(); return false; }
+    if (!res.ok) { if (savedJob() === id) saveJob(null); return false; }  // ya expiró o el servidor se reinició
     j = await res.json();
-  } catch { return; }
-  if (j.status === "error") { saveJob(null); return; }
+  } catch { return false; }
+  if (j.status === "error") { if (savedJob() === id) saveJob(null); return false; }
   const m = MODES.find((x) => Object.values(x.presets).includes(j.preset));
   if (m) {
     const speed = Object.keys(m.presets).find((k) => m.presets[k] === j.preset);
@@ -491,11 +764,14 @@ async function resumeJob() {
     if (radio) radio.checked = true;
     selectMode(m);
   }
-  if (j.status === "done") { showResults(j); return; }
+  if (j.status === "done") { showResults(j); return true; }
   busy = true; updateButton();
+  saveJob(j.id);
+  $("results").hidden = true;
   $("progress").hidden = false;
   showJob(j);
   follow(j.id);
+  return true;
 }
 
 function finish() { if (es) { es.close(); es = null; } busy = false; updateButton(); }
@@ -515,6 +791,8 @@ function showJob(j) {
     const ahead = pos ? pos - 1 : 0;
     const detail = ahead === 0 ? "Eres el siguiente." : `Hay ${ahead} ${ahead === 1 ? "persona" : "personas"} antes que tú.`;
     setBar(null, "Esperando turno…", detail);
+  } else if (j.status === "processing" && j.phase === "waiting_gpu") {
+    setBar(null, "Esperando GPU…", "Los servidores están ocupados. Si en unos minutos no hay GPU, te avisamos.");
   } else if (j.status === "processing") {
     const pct = j.progress ?? null;
     const action = mode && mode.id === "podcast" ? "Limpiando tu audio" : "Separando tu audio";
@@ -646,6 +924,8 @@ function clearTracks() {
 
 $("playAll").onclick = () => (playing ? pauseAll() : playAll());
 $("seek").addEventListener("pointerdown", () => { dragging = true; });
+// Un clic sin mover la barra no dispara "change": sin esto se quedaría congelada.
+for (const ev of ["pointerup", "pointercancel"]) $("seek").addEventListener(ev, () => { dragging = false; });
 $("seek").addEventListener("input", () => { $("timeNow").textContent = minutes(+$("seek").value); });
 $("seek").addEventListener("change", () => { dragging = false; seekAll(+$("seek").value); });
 
@@ -670,14 +950,28 @@ function showResults(j) {
     if (tracks === mine) $("playerStatus").textContent = "No se pudo cargar la vista previa. Puedes descargar las pistas igual.";
   });
   $("zip").hidden = j.stems.length < 2;
-  $("expires").textContent = j.expires_in_minutes
-    ? `Tus archivos se borran automáticamente en ${j.expires_in_minutes} minutos. Descárgalos antes.`
-    : "";
+  $("expires").textContent = expiresText(j);
   updateLinks();
   $("progress").hidden = true;
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth", block: "start" });
 }
+function expiresText(j) {
+  // Desde la fecha, para que siga siendo cierto si se vuelve a calcular más tarde.
+  const n = j.expires_at ? Math.max(0, Math.round((parseDate(j.expires_at) - Date.now()) / 60000)) : j.expires_in_minutes;
+  if (!n) return "";
+  // Pro: una semana y quedan en "Mis audios". Gratis e invitados: 1 hora.
+  if (n > 120 && j.expires_at) {
+    const date = dateText(j.expires_at);
+    return hasHistory()
+      ? `Tus archivos se guardan hasta el ${date} y también los encuentras en Mis audios.`
+      : `Tus archivos se guardan hasta el ${date}; descárgalos antes.`;  // era Pro y ya canceló
+  }
+  let text = `Tus archivos se borran automáticamente en ${plural(n, "minuto", "minutos")}. Descárgalos antes.`;
+  if (plan && plan.plan !== "pro") text += " Con el plan Pro se guardan una semana y quedan en tu historial.";
+  return text;
+}
+
 function updateLinks() {
   if (!lastJob) return;
   const fmt = $("format").value;
@@ -725,7 +1019,7 @@ $("again").onclick = () => {
 
 setPlaying(false);
 showAccount();
-loadConfig().then(() => { updateLimits(); resumeJob(); });
+loadConfig().then(() => { updateLimits(); resumeJob(); loadPlan(); });
 </script>
 </body>
 </html>

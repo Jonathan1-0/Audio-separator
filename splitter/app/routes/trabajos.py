@@ -1,4 +1,4 @@
-"""Ruta de "Mis audios"."""
+"""Ruta de "Mis audios" (solo plan pro)."""
 from fastapi import APIRouter, Depends
 
 from ..dependencies import usuario_actual

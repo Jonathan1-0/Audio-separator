@@ -75,12 +75,12 @@ def listar_pendientes(db: Session) -> List[Trabajo]:
     return list(db.scalars(consulta))
 
 
-def listar_por_usuario(db: Session, usuario_id: int) -> List[Trabajo]:
-    """Historial del usuario, del más nuevo al más antiguo."""
+def listar_por_usuario(db: Session, usuario_id: int, desde: datetime) -> List[Trabajo]:
+    """Historial del usuario desde esa fecha, del más nuevo al más antiguo."""
     consulta = (
         select(Trabajo)
         .options(selectinload(Trabajo.resultados))
-        .where(Trabajo.usuario_id == usuario_id)
+        .where(Trabajo.usuario_id == usuario_id, Trabajo.creado_en >= desde)
         .order_by(Trabajo.creado_en.desc())
     )
     return list(db.scalars(consulta))

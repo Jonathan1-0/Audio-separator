@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -23,6 +23,7 @@ from .database import SessionLocal, ahora_utc
 from .engine import gpu_seconds_del_hilo
 from .models.tablas import Trabajo
 from .repositories import trabajos as repo_trabajos
+from .services.cuotas import minutos_guardado, plan_vigente
 
 log = logging.getLogger("splitter.jobs")
 
@@ -54,6 +55,7 @@ class Job:
     gpu_seconds: Optional[float] = None
     created_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
+    expires_at: Optional[float] = None  # cuándo se borran sus pistas; depende del plan
     version: int = 0  # sube con cada cambio; el SSE lo usa para saber si hay novedades
 
     def touch(self) -> None:
@@ -69,7 +71,8 @@ def _job_desde_fila(fila: Trabajo) -> Optional[Job]:
     """Arma un Job desde la base. Devuelve None si sus archivos ya expiraron."""
     status = ESTADOS_JOB[fila.estado]
     ahora = ahora_utc()
-    stems = {r.stem: Path(r.ruta_archivo) for r in fila.resultados if r.expira_en > ahora}
+    vigentes = [r for r in fila.resultados if r.expira_en > ahora]
+    stems = {r.stem: Path(r.ruta_archivo) for r in vigentes}
     if status == DONE and not stems:
         return None
     carpeta = config.DATA_DIR / fila.id
@@ -91,6 +94,7 @@ def _job_desde_fila(fila: Trabajo) -> Optional[Job]:
         gpu_seconds=fila.gpu_seconds,
         created_at=_segundos(fila.creado_en),
         finished_at=_segundos(fila.terminado_en),
+        expires_at=max((_segundos(r.expira_en) for r in vigentes), default=None),
     )
 
 
@@ -235,6 +239,8 @@ class JobManager:
                 if s not in keep:
                     p.unlink(missing_ok=True)
             job.stem_files = keep
+            # Antes de marcarlo listo: el SSE manda el vencimiento en cuanto ve DONE.
+            job.expires_at = self._vencimiento(job)
             job.status, job.progress, job.message = DONE, 1.0, MENSAJES[DONE]
         except Exception as exc:  # noqa: BLE001 - el error se muestra en la página
             if self.jobs.get(job.id) is not job:
@@ -266,11 +272,27 @@ class JobManager:
         except SQLAlchemyError:
             log.exception("No se pudo guardar el progreso de %s", job.id)
 
+    def _vencimiento(self, job: Job) -> float:
+        """Cuándo se borran sus pistas. El plan que tiene al terminar decide: gratis 1 h, pro una semana."""
+        minutos = config.JOB_TTL_MINUTES
+        if job.usuario_id is not None:
+            try:
+                with SessionLocal() as db:
+                    minutos = minutos_guardado(plan_vigente(db, job.usuario_id))
+            except SQLAlchemyError:
+                log.exception("No se pudo leer el plan de %s; se guarda %d min", job.id, minutos)
+        return time.time() + minutos * 60
+
     def _guardar_final(self, job: Job) -> bool:
         """Si la base falla, el trabajo sigue en memoria."""
         ahora = ahora_utc()
         try:
             with SessionLocal() as db:
+                expira_en = (
+                    datetime.fromtimestamp(job.expires_at, timezone.utc).replace(tzinfo=None)
+                    if job.expires_at
+                    else ahora
+                )
                 repo_trabajos.terminar(
                     db,
                     job.id,
@@ -280,7 +302,7 @@ class JobManager:
                     job.error,
                     job.gpu_seconds,
                     {stem: str(ruta) for stem, ruta in job.stem_files.items()},
-                    ahora + timedelta(minutes=config.JOB_TTL_MINUTES),
+                    expira_en,
                 )
             return True
         except SQLAlchemyError:
@@ -327,6 +349,16 @@ class JobManager:
             for d in config.DATA_DIR.iterdir():
                 # La carpeta cambió por última vez al borrar el audio original, cuando terminó.
                 if d.is_dir() and re.fullmatch(r"[0-9a-f]{32}", d.name) and d.name not in self.jobs:
-                    if d.stat().st_mtime < cutoff:
+                    if d.stat().st_mtime < cutoff and not self._sigue_vigente(d.name):
                         log.info("Borrando archivos expirados de %s", d.name)
                         shutil.rmtree(d, ignore_errors=True)
+
+    def _sigue_vigente(self, job_id: str) -> bool:
+        """Un trabajo con cuenta se guarda hasta su expira_en (una semana en pro)."""
+        try:
+            with SessionLocal() as db:
+                fila = repo_trabajos.obtener(db, job_id)
+                return fila is not None and any(r.expira_en > ahora_utc() for r in fila.resultados)
+        except SQLAlchemyError:
+            log.exception("No se pudo revisar si %s sigue vigente", job_id)
+            return True  # ante la duda no se borra; se revisa en la siguiente vuelta

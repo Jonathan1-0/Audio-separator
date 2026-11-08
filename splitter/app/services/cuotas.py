@@ -31,6 +31,15 @@ def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
     return nueva
 
 
+def plan_vigente(db: Session, usuario_id: int) -> str:
+    return suscripcion_vigente(db, usuario_id).plan.nombre
+
+
+def minutos_guardado(plan: str) -> int:
+    """Cuánto se guardan las pistas de un trabajo de ese plan."""
+    return config.MINUTOS_GUARDADO_PLAN.get(plan, config.JOB_TTL_MINUTES)
+
+
 def _revisar_cantidad(db: Session, suscripcion: Suscripcion) -> None:
     usados = repo_trabajos.contar_en_periodo(
         db, suscripcion.usuario_id, suscripcion.inicio_periodo, suscripcion.fin_periodo

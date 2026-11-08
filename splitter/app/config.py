@@ -34,7 +34,13 @@ BEHIND_PROXY = os.getenv("SPLITTER_BEHIND_PROXY", "0") == "1"
 DIAS_SESION = _int("SPLITTER_DIAS_SESION", 7)
 DIAS_PERIODO = _int("SPLITTER_DIAS_PERIODO", 30)
 
+# Cuánto se guardan los archivos de un trabajo terminado. Invitados: JOB_TTL_MINUTES.
 JOB_TTL_MINUTES = _int("SPLITTER_JOB_TTL_MINUTES", 60)
+# Con cuenta depende del plan: gratis 1 hora, pro una semana (y solo pro tiene historial).
+MINUTOS_GUARDADO_PLAN = {
+    "gratis": _int("SPLITTER_MINUTOS_GUARDADO_GRATIS", 60),
+    "pro": _int("SPLITTER_MINUTOS_GUARDADO_PRO", 7 * 24 * 60),
+}
 # Trabajos a la vez, uno por GPU. Debe coincidir con SPLITTER_MAX_CONTAINERS de modal_app.py.
 PARALLEL_JOBS = _int("SPLITTER_PARALLEL_JOBS", 3)
 

@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -106,9 +107,10 @@ def _public(job: Job) -> dict:
             for stem in job.stem_files
         ]
         data["download_all_url"] = f"/api/jobs/{job.id}/download"
-        data["expires_in_minutes"] = max(
-            0, round(config.JOB_TTL_MINUTES - (time.time() - (job.finished_at or time.time())) / 60)
-        )
+        # Invitado: JOB_TTL_MINUTES desde que terminó; con cuenta, lo que diga su plan.
+        expira = job.expires_at or (job.finished_at or time.time()) + config.JOB_TTL_MINUTES * 60
+        data["expires_in_minutes"] = max(0, round((expira - time.time()) / 60))
+        data["expires_at"] = datetime.fromtimestamp(expira, timezone.utc).isoformat().replace("+00:00", "Z")
     return data
 
 

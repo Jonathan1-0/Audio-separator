@@ -17,6 +17,8 @@ if GPU not in SUPPORTED_GPUS:
     raise ValueError(f"SPLITTER_GPU debe ser uno de {SUPPORTED_GPUS}, no {GPU!r}")
 
 APP_NAME = f"splitter-gpu-{GPU.lower()}"
+# Si Modal no tiene L4 libre, usa una T4 en vez de dejar el trabajo esperando.
+GPU_OPTIONS = ["L4", "T4"] if GPU == "L4" else [GPU]
 # GPUs encendidas a la vez como máximo. Debe coincidir con SPLITTER_PARALLEL_JOBS.
 MAX_CONTAINERS = int(os.environ.get("SPLITTER_MAX_CONTAINERS", "3"))
 MODEL_DIR = "/models"
@@ -42,7 +44,7 @@ app = modal.App(APP_NAME, image=image)
 
 
 @app.cls(
-    gpu=GPU,
+    gpu=GPU_OPTIONS,
     volumes={MODEL_DIR: models},
     timeout=20 * 60,
     max_containers=MAX_CONTAINERS,
@@ -101,7 +103,7 @@ class Separator:
 
             timings = self.engine.last_timings
             stats = {
-                "gpu": GPU,
+                "gpu": self.engine.device_info().get("device", GPU),  # la que tocó, puede ser la de respaldo
                 "gpu_seconds": time.perf_counter() - started,
                 "load_seconds": timings["load_seconds"],
                 "separate_seconds": timings["separate_seconds"],
