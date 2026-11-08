@@ -1,7 +1,22 @@
 # Sistema
 .DS_Store
 Thumbs.db
+.vscode
 
-# Datos locales
+# Python
+__pycache__/
+*.py[cod]
+splitter/.venv/
+
+# Audio
+*.wav
+*.flac
+*.mp3
+
+# Datos locales y secretos
 data/
+splitter/data/
+splitter/models/
+splitter.db
+.env
 *.log
