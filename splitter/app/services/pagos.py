@@ -22,6 +22,8 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
         actual = suscripcion_vigente(db, usuario_id)
         if actual.plan.nombre == "pro":
             raise HTTPException(409, "Ya tienes el plan pro.")
+        if actual.plan.nombre != "gratis":
+            raise HTTPException(409, "Tu cuenta ya tiene todo lo del plan pro.")
         plan = repo_suscripciones.buscar_plan(db, "pro")
 
         actual.estado = "cancelada"

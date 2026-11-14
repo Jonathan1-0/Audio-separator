@@ -22,9 +22,12 @@ const message = $('login-message');
 const modes = {
   login: { title: 'Inicia sesión', lead: 'Guarda tus separaciones y vuelve a ellas cuando quieras.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
-  // Solo interfaz: el backend todavia no envia correos para recuperar la contrasena.
   reset: { title: 'Recupera tu acceso', lead: 'Escribe tu correo y te enviaremos un enlace para elegir otra contraseña.', submit: 'Enviar enlace', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login' },
+  // Se abre al llegar desde el enlace del correo (#restablecer=CODIGO).
+  newpass: { title: 'Elige tu nueva contraseña', lead: 'Escríbela dos veces para confirmar.', submit: 'Guardar contraseña', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login', autocomplete: 'new-password' },
 };
+let resetCode = '';        // codigo del enlace de recuperacion
+let socialReady = false;   // hay al menos un proveedor configurado
 let mode = 'login';
 let opener = null;
 let closing = false;
@@ -35,9 +38,10 @@ const contentItems = () => [...form.children].filter((el) => el.id !== 'login-cl
 const clearInline = (...elements) => elements.forEach((el) => { el.style.removeProperty('opacity'); el.style.removeProperty('transform'); });
 const enter = (targets, from, delay) => motion.animate(targets, { opacity: [0, 1], y: [from, 0] }, { duration: 0.3, ease: EASE, delay }).finished.then(() => clearInline(...[].concat(targets)));
 
-function setMessage(text = '') {
+function setMessage(text = '', ok = false) {
   message.textContent = text;
   message.hidden = !text;
+  message.classList.toggle('is-ok', ok);   // verde para avisos, rojo para errores
 }
 
 function setMode(next) {
@@ -50,13 +54,17 @@ function setMode(next) {
   $('switch-link').textContent = m.switchLink;
   $('switch-link').dataset.modeTarget = m.next;
   $('password-fields').hidden = next === 'reset';
-  $('confirm-field').hidden = next !== 'register';
+  const choosing = next === 'register' || next === 'newpass';   // se elige una contrasena nueva
+  $('confirm-field').hidden = !choosing;
+  $('password-hint').hidden = !choosing;
+  $('email-field').hidden = next === 'newpass';
+  $('required-note').hidden = next !== 'register';
   $('name-field').hidden = next !== 'register';
   $('forgot-link').hidden = next !== 'login';
-  $('social-auth').hidden = next === 'reset';
+  $('social-auth').hidden = !socialReady || next === 'reset' || next === 'newpass';
   if (m.autocomplete) password.autocomplete = m.autocomplete;
   password.required = next !== 'reset';
-  confirm.required = next === 'register';
+  confirm.required = choosing;
   nameInput.required = next === 'register';
   setMessage();
 }
@@ -91,14 +99,14 @@ function morph(change, fadeIn) {
   flip = motion.animate(0, 1, { duration: 0.3, ease: EASE, onUpdate: apply, onComplete: endFlip });
 }
 
-const showMessage = (text) => morph(() => setMessage(text), () => (text ? [message] : []));
+const showMessage = (text, ok = false) => morph(() => setMessage(text, ok), () => (text ? [message] : []));
 const switchMode = (next) => morph(() => setMode(next), () => contentItems().filter((el) => !el.classList.contains('login-brand')));
 
-function openDialog(trigger) {
+function openDialog(trigger, startMode = 'login') {
   opener = trigger;
-  setMode('login');
+  setMode(startMode);
   dialog.showModal();
-  email.focus();
+  (startMode === 'newpass' ? password : email).focus();
   if (!canAnimate()) return;
   const items = contentItems();
   motion.animate(scrim, { opacity: [0, 1] }, { duration: 0.2, ease: EASE }).finished.then(() => clearInline(scrim));
@@ -129,9 +137,8 @@ document.querySelectorAll('[data-open-login]').forEach((button) => {
 form.addEventListener('click', (event) => {
   const provider = event.target.closest('[data-provider]');
   if (provider) {
-    // Solo interfaz: el acceso con Google, Apple o Facebook todavia no esta conectado al backend.
-    const name = provider.querySelector('.social-name').textContent;
-    showMessage(`Vista previa: el acceso con ${name} estará disponible próximamente.`);
+    // El servidor manda a la pagina de Google o Facebook y al terminar regresa aqui con la sesion.
+    location.href = `/auth/social/${provider.dataset.provider}`;
     return;
   }
   const target = event.target.closest('[data-mode-target]');
@@ -180,13 +187,22 @@ form.addEventListener('submit', async (event) => {
     nameInput.focus();
     return;
   }
-  if (!email.value.trim() || !email.validity.valid) {
+  if (mode !== 'newpass' && (!email.value.trim() || !email.validity.valid)) {
     showMessage('Escribe un correo electrónico válido.');
     email.focus();
     return;
   }
   if (mode === 'reset') {
-    showMessage('Vista previa: la recuperación de acceso estará disponible próximamente.');
+    sending = true;
+    submit.disabled = true;
+    try {
+      const { mensaje } = await window.recuperarPassword(email.value.trim());
+      showMessage(mensaje, true);
+    } catch (error) {
+      showMessage(error.message);
+    }
+    sending = false;
+    submit.disabled = false;
     return;
   }
   if (!password.value) {
@@ -194,7 +210,7 @@ form.addEventListener('submit', async (event) => {
     password.focus();
     return;
   }
-  if (mode === 'register') {
+  if (mode === 'register' || mode === 'newpass') {
     if (password.value.length < 8) {
       showMessage('La contraseña debe tener al menos 8 caracteres.');
       password.focus();
@@ -210,6 +226,17 @@ form.addEventListener('submit', async (event) => {
   submit.disabled = true;
   setMessage();
   try {
+    if (mode === 'newpass') {
+      const { mensaje } = await window.restablecerPassword(resetCode, password.value);
+      resetCode = '';
+      sending = false;
+      submit.disabled = false;
+      form.reset();
+      switchMode('login');
+      showMessage(mensaje, true);
+      email.focus();
+      return;
+    }
     if (mode === 'register') await window.registrarse(email.value.trim(), nameInput.value.trim(), password.value);
     else await window.iniciarSesion(email.value.trim(), password.value);
     sending = false;
@@ -221,3 +248,20 @@ form.addEventListener('submit', async (event) => {
     showMessage(error.message);
   }
 });
+
+// Botones de Google y Facebook: solo se muestran los que el servidor tiene configurados.
+window.proveedoresSociales?.().then((disponibles) => {
+  for (const button of form.querySelectorAll('[data-provider]')) {
+    button.hidden = !disponibles[button.dataset.provider];
+    if (!button.hidden) socialReady = true;
+  }
+  if (dialog.open) setMode(mode); else $('social-auth').hidden = !socialReady;
+});
+
+// Llegada desde el correo de recuperacion: index.html#restablecer=CODIGO abre el paso de nueva contrasena.
+const arrival = location.hash.match(/^#restablecer=(.+)$/);
+if (arrival) {
+  resetCode = arrival[1];
+  history.replaceState(null, '', location.pathname + location.search);
+  openDialog(null, 'newpass');
+}

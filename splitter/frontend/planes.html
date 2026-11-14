@@ -14,14 +14,40 @@
   <script src="plans.js" defer></script>
 </head>
 <body class="plans-page">
+  <header class="site-header" data-liquid-ignore>
+    <nav class="nav-inner" aria-label="Principal">
+      <a class="brand" href="index.html" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
+      <div class="nav-actions">
+        <a class="nav-how" href="index.html#mode-section">Cómo funciona</a>
+        <a id="nav-planes-link" class="nav-planes" href="planes.html" aria-current="page">Planes</a>
+        <a class="nav-help" href="index.html#help-section">Ayuda</a>
+        <a class="nav-login" href="index.html#login">Inicia sesión</a>
+        <a id="nav-register" class="nav-register" href="index.html#registro">Regístrate</a>
+        <a id="nav-plan" class="primary-button nav-cta" href="planes.html" hidden>Planes</a>
+        <div class="profile" id="profile" hidden>
+          <button id="profile-button" class="profile-button" type="button" aria-expanded="false" aria-controls="profile-menu" aria-label="Cuenta">
+            <svg class="profile-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.7-3.7 3.6-5.6 7.2-5.6s6.5 1.9 7.2 5.6"/></svg>
+            <span id="profile-initial" class="profile-initial" aria-hidden="true" hidden></span>
+          </button>
+          <div id="profile-menu" class="profile-menu" hidden>
+            <div class="menu-user menu-session"><strong id="menu-name"></strong><span id="menu-email"></span><span id="menu-plan" class="menu-plan"></span></div>
+            <a class="menu-item menu-mobile" href="index.html#mode-section"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span>Cómo funciona</a>
+            <a class="menu-item menu-mobile menu-guest" href="planes.html"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg></span>Planes</a>
+            <a class="menu-item menu-mobile" href="index.html#help-section"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7M12 17h.01"/></svg></span>Ayuda</a>
+            <a class="menu-item menu-mobile menu-guest" href="index.html#login"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></span>Iniciar sesión</a>
+            <button id="menu-audios" class="menu-item menu-session menu-pro" type="button"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span>Mis audios</button>
+            <a class="menu-item menu-session menu-free" href="planes.html"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg></span>Pasarse a Pro</a>
+            <button id="menu-cancel" class="menu-item menu-session menu-pro" type="button"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></span>Cancelar plan Pro</button>
+            <button id="menu-logout" class="menu-item menu-session" type="button"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg></span>Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
   <main id="planes" class="plans" aria-labelledby="plans-title">
     <div class="plans-bg" aria-hidden="true"></div>
     <svg class="plans-mark" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg>
 
-    <header class="plans-header">
-      <a class="back-link" href="index.html"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Volver</a>
-      <a class="brand" href="index.html" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
-    </header>
 
     <div class="plans-inner">
       <p class="eyebrow">Planes</p>

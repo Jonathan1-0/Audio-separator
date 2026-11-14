@@ -1,9 +1,10 @@
 """Dependencias de FastAPI para saber quién hace la petición."""
 from typing import Optional
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from . import config
 from .models.tablas import Usuario
 from .services import auth
 
@@ -25,3 +26,8 @@ def usuario_opcional(credenciales: Optional[HTTPAuthorizationCredentials] = Depe
     if credenciales is None:
         return None
     return auth.usuario_por_token(credenciales.credentials)
+
+
+def direccion_base(request: Request) -> str:
+    """Dirección de la página, sin diagonal al final: la de .env o, si no hay, la de la petición."""
+    return config.PUBLIC_URL or str(request.base_url).rstrip("/")

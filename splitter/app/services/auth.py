@@ -20,15 +20,14 @@ def _validar_datos(email: str, nombre: str, password: str) -> None:
         raise HTTPException(400, "El email no es válido.")
     if not nombre or len(nombre) > 100:
         raise HTTPException(400, "El nombre debe tener entre 1 y 100 caracteres.")
-    if len(password) < 8 or len(password.encode()) > MAX_BYTES_PASSWORD:
-        raise HTTPException(400, "La contraseña debe tener entre 8 y 72 caracteres.")
+    validar_password(password)
 
 
 def registrar(email: str, nombre: str, password: str) -> dict:
     """Crea el usuario con el plan gratis."""
     email, nombre = email.strip().lower(), nombre.strip()
     _validar_datos(email, nombre, password)
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    password_hash = crear_hash(password)
     with SessionLocal() as db:
         if repo_usuarios.buscar_por_email(db, email) is not None:
             raise HTTPException(409, "Ya existe una cuenta con ese email.")
@@ -52,13 +51,29 @@ def login(email: str, password: str) -> dict:
             raise HTTPException(401, "Email o contraseña incorrectos.")
         if usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
-        ahora = ahora_utc()
-        repo_usuarios.borrar_sesiones_vencidas(db, usuario.id, ahora)
-        token = secrets.token_hex(32)
-        expira_en = ahora + timedelta(days=config.DIAS_SESION)
-        repo_usuarios.crear_sesion(db, usuario.id, token, expira_en)
+        datos = abrir_sesion(db, usuario)
         db.commit()
+    return datos
+
+
+def abrir_sesion(db, usuario: Usuario) -> dict:
+    """Crea el token de una sesión nueva. Lo usan el login normal y el de Google/Facebook.
+    Quien llama hace el commit."""
+    ahora = ahora_utc()
+    repo_usuarios.borrar_sesiones_vencidas(db, usuario.id, ahora)
+    token = secrets.token_hex(32)
+    expira_en = ahora + timedelta(days=config.DIAS_SESION)
+    repo_usuarios.crear_sesion(db, usuario.id, token, expira_en)
     return {"token": token, "expira_en": f"{expira_en.isoformat()}Z", "nombre": usuario.nombre}
+
+
+def validar_password(password: str) -> None:
+    if len(password) < 8 or len(password.encode()) > MAX_BYTES_PASSWORD:
+        raise HTTPException(400, "La contraseña debe tener entre 8 y 72 caracteres.")
+
+
+def crear_hash(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def logout(token: str) -> None:

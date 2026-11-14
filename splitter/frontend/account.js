@@ -3,12 +3,12 @@
 (() => {
   'use strict';
 
-  const NOMBRE_PLAN = { gratis: 'Gratis', pro: 'Pro' };
+  const NOMBRE_PLAN = { gratis: 'Gratis', pro: 'Pro', admin: 'Admin' };   // admin: cuenta de prueba de .env
 
   // =====================================================================================
   // ESTADO DE SESION (unico, compartido por las dos paginas).
   //   Sin sesion: null
-  //   Con sesion: { token, nombre, email, plan: 'gratis' | 'pro', cuenta }
+  //   Con sesion: { token, nombre, email, plan: 'gratis' | 'pro' | 'admin', cuenta }
   //     cuenta = respuesta de GET /suscripcion (limites, consumo del periodo, historial, fin_periodo...).
   // El token se guarda en localStorage para que la sesion siga al recargar y al pasar entre paginas.
   // =====================================================================================
@@ -70,6 +70,12 @@
     await iniciarSesion(email, password);
   }
 
+  // Recuperar contrasena: pedir el enlace por correo y, con su codigo, guardar la nueva.
+  const recuperarPassword = (email) => api('/auth/recuperar', { method: 'POST', body: { email } });
+  const restablecerPassword = (codigo, password) => api('/auth/restablecer', { method: 'POST', body: { codigo, password } });
+  // Que botones de acceso social mostrar: solo los que tienen sus claves en el servidor.
+  const proveedoresSociales = () => api('/auth/social').catch(() => ({}));
+
   async function cerrarSesion() {
     try { await api('/auth/logout', { method: 'POST' }); } catch { /* la sesion local se cierra igual */ }
     setSesion(null);
@@ -123,7 +129,7 @@
   let pago = null;
   function contratarPro() {
     if (!sesion) { pedirCuenta('Para contratar Pro necesitas una cuenta. Crea una o inicia sesión y vuelve aquí.'); return; }
-    if (sesion.plan === 'pro') return;
+    if (sesion.plan !== 'gratis') return;
     if (!pago) {
       pago = crearDialogo('wall-form');
       pago.setAttribute('aria-labelledby', 'pago-title');
@@ -229,7 +235,7 @@
   }
   let audios = null;
   async function misAudios() {
-    if (sesion?.plan !== 'pro') { location.href = 'planes.html'; return; }
+    if (!sesion?.cuenta?.historial) { location.href = 'planes.html'; return; }
     if (!audios) {
       audios = crearDialogo('wall-wide');
       audios.setAttribute('aria-labelledby', 'audios-title');
@@ -240,7 +246,9 @@
     const lista = audios.querySelector('#audios-list');
     const nota = audios.querySelector('#audios-note');
     const dias = Math.round((sesion.cuenta?.minutos_guardado || 0) / 1440);
-    nota.textContent = `Con Pro tus audios se guardan ${plural(dias, 'día', 'días')}. Plan Pro hasta el ${fecha(sesion.cuenta?.fin_periodo)}.`;
+    nota.textContent = sesion.plan === 'admin'
+      ? `Tus audios se guardan ${plural(dias, 'día', 'días')}.`
+      : `Con Pro tus audios se guardan ${plural(dias, 'día', 'días')}. Plan Pro hasta el ${fecha(sesion.cuenta?.fin_periodo)}.`;
     lista.replaceChildren(Object.assign(document.createElement('li'), { className: 'history-empty', textContent: 'Cargando…' }));
     if (!audios.open) audios.showModal();
     let items;
@@ -303,13 +311,14 @@
     function renderBar() {
       const logged = Boolean(sesion);
       const pro = sesion?.plan === 'pro';
+      const admin = sesion?.plan === 'admin';
       header.dataset.sesion = logged ? sesion.plan : 'none';
       loginLink.hidden = logged;
       registerButton.hidden = logged;
       planesLink.hidden = logged;
       planPill.hidden = !logged;
       profileBox.hidden = !logged && !compact.matches;
-      planPill.textContent = pro ? NOMBRE_PLAN.pro : 'Planes';
+      planPill.textContent = pro || admin ? NOMBRE_PLAN[sesion.plan] : 'Planes';
       planPill.setAttribute('aria-label', logged ? `Plan actual: ${NOMBRE_PLAN[sesion.plan]}. Ver planes` : 'Ver planes');
       profileInitial.hidden = !logged;
       profileIcon.style.display = logged ? 'none' : '';   // en un <svg> la propiedad .hidden no existe
@@ -318,14 +327,16 @@
         profileInitial.textContent = (sesion.nombre || sesion.email || '?').trim().charAt(0).toUpperCase();
         $('menu-name').textContent = sesion.nombre || '';
         $('menu-email').textContent = sesion.email || '';
-        $('menu-plan').textContent = c
-          ? `Plan ${NOMBRE_PLAN[sesion.plan]} · ${c.trabajos_usados} de ${c.trabajos_por_mes} trabajos usados`
-          : `Plan ${NOMBRE_PLAN[sesion.plan]}`;
+        $('menu-plan').textContent = admin
+          ? `Administrador · sin límite de trabajos${c ? ` (${c.trabajos_usados} en este periodo)` : ''}`
+          : c ? `Plan ${NOMBRE_PLAN[sesion.plan]} · ${c.trabajos_usados} de ${c.trabajos_por_mes} trabajos usados`
+            : `Plan ${NOMBRE_PLAN[sesion.plan]}`;
       }
       for (const el of profileMenu.querySelectorAll('.menu-session')) el.hidden = !logged;
       for (const el of profileMenu.querySelectorAll('.menu-guest')) el.hidden = logged;
       for (const el of profileMenu.querySelectorAll('.menu-pro')) el.hidden = !pro;
-      for (const el of profileMenu.querySelectorAll('.menu-free')) el.hidden = !logged || pro;
+      for (const el of profileMenu.querySelectorAll('.menu-free')) el.hidden = !logged || pro || admin;
+      if (admin) $('menu-audios').hidden = false;   // admin: tiene "Mis audios", pero no hay Pro que cancelar
       profileButton.setAttribute('aria-label', logged ? `Cuenta de ${sesion.nombre || sesion.email}` : 'Cuenta');
       if (!menuHasItems()) closeMenu();
     }
@@ -413,7 +424,24 @@
     refrescarCuenta,
     contratarPro,
     cancelarPro,
+    recuperarPassword,
+    restablecerPassword,
+    proveedoresSociales,
   });
+
+  // Regreso de Google o Facebook: el servidor vuelve a esta pagina con "#sesion=TOKEN" o "#error=MENSAJE".
+  const regreso = location.hash.match(/^#(sesion|error)=(.+)$/);
+  if (regreso) {
+    history.replaceState(null, '', location.pathname + location.search);   // el token no se queda en la barra
+    if (regreso[1] === 'sesion') {
+      const token = regreso[2];
+      api('/suscripcion', { token })
+        .then((cuenta) => setSesion(desdeCuenta(token, cuenta)))
+        .catch(() => avisar('No se pudo entrar', 'Intenta iniciar sesión de nuevo.'));
+    } else {
+      avisar('No se pudo entrar', decodeURIComponent(regreso[2]));
+    }
+  }
 
   listeners.forEach((fn) => fn());
   refrescarCuenta();   // el plan pudo cambiar (vencer, cancelarse) desde la ultima visita

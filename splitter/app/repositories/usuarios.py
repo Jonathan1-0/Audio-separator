@@ -41,3 +41,14 @@ def borrar_sesion(db: Session, token: str) -> None:
 
 def borrar_sesiones_vencidas(db: Session, usuario_id: int, ahora: datetime) -> None:
     db.execute(delete(Sesion).where(Sesion.usuario_id == usuario_id, Sesion.expira_en < ahora))
+
+
+def cambiar_password(db: Session, usuario: Usuario, password_hash: str) -> None:
+    """Quien llama hace el commit."""
+    usuario.password_hash = password_hash
+    db.add(usuario)
+
+
+def borrar_sesiones_de(db: Session, usuario_id: int) -> None:
+    """Cierra la sesión en todos los dispositivos (se usa al cambiar la contraseña)."""
+    db.execute(delete(Sesion).where(Sesion.usuario_id == usuario_id))

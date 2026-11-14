@@ -2,11 +2,13 @@
 .DS_Store
 Thumbs.db
 .vscode
+.claude/
 
 # Python
 __pycache__/
 *.py[cod]
 splitter/.venv/
+.pytest_cache/
 
 # Audio
 *.wav
@@ -19,4 +21,5 @@ splitter/data/
 splitter/models/
 splitter.db
 .env
+*.pem
 *.log

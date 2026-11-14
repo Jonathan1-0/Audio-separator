@@ -1,10 +1,10 @@
 """Rutas de registro, login y logout."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from ..dependencies import token_actual, usuario_actual
+from ..dependencies import direccion_base, token_actual, usuario_actual
 from ..models.tablas import Usuario
-from ..services import auth
+from ..services import auth, invitados, recuperacion
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,6 +29,29 @@ def registro(datos: DatosRegistro):
 @router.post("/login")
 def login(datos: DatosLogin):
     return auth.login(datos.email, datos.password)
+
+
+class DatosRecuperar(BaseModel):
+    email: str
+
+
+class DatosRestablecer(BaseModel):
+    codigo: str
+    password: str
+
+
+@router.post("/recuperar")
+def recuperar(datos: DatosRecuperar, request: Request):
+    """Envía el enlace para cambiar la contraseña. Responde lo mismo exista o no la cuenta."""
+    recuperacion.pedir(datos.email, invitados.ip_de(request), direccion_base(request))
+    return {"mensaje": "Si ese correo tiene cuenta, te enviamos un enlace para cambiar la contraseña."}
+
+
+@router.post("/restablecer")
+def restablecer(datos: DatosRestablecer):
+    """Guarda la contraseña nueva usando el código que venía en el enlace."""
+    recuperacion.cambiar(datos.codigo, datos.password)
+    return {"mensaje": "Tu contraseña se cambió. Ya puedes iniciar sesión."}
 
 
 @router.post("/logout", status_code=204)

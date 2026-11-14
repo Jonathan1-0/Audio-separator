@@ -80,8 +80,12 @@
       button.type = 'button';
       button.className = id === PLAN_DESTACADO ? 'primary-button plan-button' : 'secondary-button plan-button';
       // Sin sesion se cuenta como plan gratis (el invitado tiene los mismos limites).
-      const isCurrent = id === 'gratis' ? planActual !== 'pro' : planActual === id;
-      if (isCurrent) {
+      const isCurrent = id === 'gratis' ? planActual !== 'pro' && planActual !== 'admin' : planActual === id;
+      if (planActual === 'admin') {
+        // La cuenta de administrador ya tiene todo; no compra ni cancela.
+        button.textContent = 'Incluido en tu cuenta de administrador';
+        button.disabled = true;
+      } else if (isCurrent) {
         button.textContent = 'Tu plan actual';
         button.disabled = true;
       } else if (id === 'pro') {

@@ -557,11 +557,12 @@
     const audio = new Audio();
     audio.preload = 'auto';
     audio.src = stem.preview_url;
-    const track = { audio, volume: 1, gain: null, source: null };
+    const track = { audio, volume: 1, gain: null, source: null, range, percent };
     range.addEventListener('input', () => {
       setVolume(track, range.value / 100);
       percent.textContent = `${range.value}%`;
       fillOf(range);
+      updateReset();
     });
     button.addEventListener('click', () => prepareDownload(button, stem.download_url));
     // Si una pista se queda cargando, las demas la esperan; al volver se igualan a su tiempo.
@@ -575,6 +576,19 @@
     tracks.push(track);
     $('track-list').append(row);
     return track;
+  }
+
+  // "Restablecer mezcla": regresa todos los volumenes al 100 %. Solo se activa si alguno cambio.
+  function updateReset() { $('reset-mix').disabled = tracks.every((track) => track.volume === 1); }
+  function resetMix() {
+    for (const track of tracks) {
+      setVolume(track, 1);
+      track.range.value = '100';
+      track.percent.textContent = '100%';
+      fillOf(track.range);
+    }
+    updateReset();
+    $('player-status').textContent = 'Mezcla restablecida: todas las pistas al 100 %.';
   }
 
   function metadataReady(audio) {
@@ -596,6 +610,7 @@
       track.audio.load();
     }
     tracks = [];
+    $('reset-mix').disabled = true;
     $('track-list').replaceChildren();
     seek.max = '0';
     seek.value = '0';
@@ -704,6 +719,18 @@
     }
   }
   $('download-all').addEventListener('click', () => { if (currentJob) prepareDownload($('download-all'), currentJob.download_all_url); });
+
+  $('reset-mix').addEventListener('click', resetMix);
+
+  // "Volver": regresa al formulario con el mismo archivo, para elegir otra opcion sin subirlo de nuevo.
+  $('results-back').addEventListener('click', () => {
+    clearTracks();
+    discardJob();
+    showView('form', { focus: false });
+    updateAction();
+    window.scrollTo({ top: Math.max(0, $('flow-block').offsetTop - 88), behavior: reduced.matches ? 'auto' : 'smooth' });
+    $('start-button').focus({ preventScroll: true });
+  });
 
   $('again').addEventListener('click', () => {
     clearTracks();

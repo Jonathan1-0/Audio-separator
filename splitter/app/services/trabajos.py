@@ -4,11 +4,11 @@ from typing import List, Optional
 
 from fastapi import HTTPException
 
+from .. import config
 from ..database import SessionLocal, ahora_utc
 from ..repositories import trabajos as repo_trabajos
 from .cuotas import minutos_guardado, plan_vigente
 
-PLAN_CON_HISTORIAL = "pro"
 
 
 def _fecha(valor: Optional[datetime]) -> Optional[str]:
@@ -19,9 +19,10 @@ def historial(usuario_id: int) -> List[dict]:
     """Trabajos de la última semana; los que ya vencieron salen sin pistas para descargar."""
     ahora = ahora_utc()
     with SessionLocal() as db:
-        if plan_vigente(db, usuario_id) != PLAN_CON_HISTORIAL:
+        plan = plan_vigente(db, usuario_id)
+        if plan not in config.PLANES_CON_HISTORIAL:
             raise HTTPException(403, "El historial de tus audios es del plan Pro.")
-        desde = ahora - timedelta(minutes=minutos_guardado(PLAN_CON_HISTORIAL))
+        desde = ahora - timedelta(minutes=minutos_guardado(plan))
         trabajos = repo_trabajos.listar_por_usuario(db, usuario_id, desde)
         return [
             {

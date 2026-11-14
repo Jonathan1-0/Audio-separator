@@ -1,0 +1,11 @@
+# Mismos finales de línea en Linux (Diego) y Windows (Jonathan).
+* text=auto eol=lf
+
+# Archivos que no son texto: Git no los toca.
+*.png binary
+*.jpg binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.pem binary

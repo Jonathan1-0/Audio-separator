@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 def _int(name: str, default: int) -> int:
     try:
@@ -11,6 +13,9 @@ def _int(name: str, default: int) -> int:
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Las variables de splitter/.env se cargan antes de leer cualquier valor (las que ya existen en el
+# entorno no se pisan).
+load_dotenv(BASE_DIR / ".env")
 
 # Subidas y resultados.
 DATA_DIR = Path(os.getenv("SPLITTER_DATA_DIR", BASE_DIR / "data")).resolve()
@@ -40,7 +45,17 @@ JOB_TTL_MINUTES = _int("SPLITTER_JOB_TTL_MINUTES", 60)
 MINUTOS_GUARDADO_PLAN = {
     "gratis": _int("SPLITTER_MINUTOS_GUARDADO_GRATIS", 60),
     "pro": _int("SPLITTER_MINUTOS_GUARDADO_PRO", 7 * 24 * 60),
+    "admin": _int("SPLITTER_MINUTOS_GUARDADO_PRO", 7 * 24 * 60),
 }
+# Planes con historial ("Mis audios").
+PLANES_CON_HISTORIAL = {"pro", "admin"}
+
+# Cuenta de administrador para probar sin registrarse: se crea (o se actualiza) al arrancar con el
+# plan "admin", que no se muestra en la página de planes. Sin estas dos variables no se crea.
+# Van SOLO en .env: el repositorio es público.
+ADMIN_EMAIL = os.getenv("SPLITTER_ADMIN_EMAIL", "").strip().lower()
+ADMIN_PASSWORD = os.getenv("SPLITTER_ADMIN_PASSWORD", "")
+ADMIN_NOMBRE = os.getenv("SPLITTER_ADMIN_NOMBRE", "Administrador").strip() or "Administrador"
 # Trabajos a la vez, uno por GPU. Debe coincidir con SPLITTER_MAX_CONTAINERS de modal_app.py.
 PARALLEL_JOBS = _int("SPLITTER_PARALLEL_JOBS", 3)
 
@@ -113,3 +128,25 @@ DEFAULT_PRESET = "2stem"
 
 # Ventanas solapadas del modelo de voz. Con 2 tarda ~la mitad, con algo menos de calidad.
 MDXC_OVERLAP = _int("SPLITTER_MDXC_OVERLAP", 4)
+
+# --- Cuentas: recuperar contraseña y entrar con Google o Facebook ---
+# Dirección pública de la página; con ella se arman los enlaces de los correos y el regreso de Google/Facebook.
+# Vacía = se usa la misma dirección con la que se abrió la página (lo normal en local).
+PUBLIC_URL = os.getenv("SPLITTER_PUBLIC_URL", "").rstrip("/")
+# Clave para firmar los enlaces de recuperación. Sin ella se inventa una al arrancar
+# (los enlaces enviados dejan de servir cuando se reinicia el servidor).
+SECRET_KEY = os.getenv("SPLITTER_SECRET_KEY", "")
+MINUTOS_RECUPERACION = _int("SPLITTER_MINUTOS_RECUPERACION", 30)
+
+# Correo de salida (por ejemplo Gmail con una "contraseña de aplicación").
+# Sin SMTP_USER el correo no se envía: el enlace sale en la terminal del servidor, para pruebas.
+SMTP_HOST = os.getenv("SPLITTER_SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = _int("SPLITTER_SMTP_PORT", 587)
+SMTP_USER = os.getenv("SPLITTER_SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SPLITTER_SMTP_PASSWORD", "")
+
+# Claves de las apps registradas en Google y Facebook. El botón de cada una solo aparece si tiene las dos.
+GOOGLE_CLIENT_ID = os.getenv("SPLITTER_GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("SPLITTER_GOOGLE_CLIENT_SECRET", "").strip()
+FACEBOOK_APP_ID = os.getenv("SPLITTER_FACEBOOK_APP_ID", "").strip()
+FACEBOOK_APP_SECRET = os.getenv("SPLITTER_FACEBOOK_APP_SECRET", "").strip()

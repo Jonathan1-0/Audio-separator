@@ -11,9 +11,9 @@ from ..repositories import suscripciones as repo_suscripciones
 from ..repositories import trabajos as repo_trabajos
 
 
-def crear_periodo_gratis(db: Session, usuario_id: int) -> Suscripcion:
-    """Periodo nuevo del plan gratis; quien llama hace el commit."""
-    plan = repo_suscripciones.buscar_plan(db, "gratis")
+def crear_periodo_gratis(db: Session, usuario_id: int, plan_nombre: str = "gratis") -> Suscripcion:
+    """Periodo nuevo del plan gratis (o admin, que se renueva solo); quien llama hace el commit."""
+    plan = repo_suscripciones.buscar_plan(db, plan_nombre)
     inicio = ahora_utc()
     fin = inicio + timedelta(days=config.DIAS_PERIODO)
     return repo_suscripciones.crear_suscripcion(db, usuario_id, plan, inicio, fin)
@@ -24,9 +24,12 @@ def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
     suscripcion = repo_suscripciones.buscar_activa(db, usuario_id)
     if suscripcion is not None and suscripcion.fin_periodo > ahora_utc():
         return suscripcion
+    siguiente = "gratis"
     if suscripcion is not None:
         suscripcion.estado = "vencida"
-    nueva = crear_periodo_gratis(db, usuario_id)
+        if suscripcion.plan.nombre == "admin":
+            siguiente = "admin"
+    nueva = crear_periodo_gratis(db, usuario_id, siguiente)
     db.commit()
     return nueva
 

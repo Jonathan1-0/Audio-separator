@@ -27,6 +27,7 @@ from .jobs import DONE, ERROR, Job, JobManager
 from .models.tablas import Usuario
 from .ratelimit import RateLimiter
 from .routes import auth as rutas_auth
+from .routes import social as rutas_social
 from .routes import suscripcion as rutas_suscripcion
 from .routes import trabajos as rutas_trabajos
 from .seed import preparar_base
@@ -59,6 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(rutas_auth.router)
+app.include_router(rutas_social.router)
 app.include_router(rutas_suscripcion.router)
 app.include_router(rutas_trabajos.router)
 

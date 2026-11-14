@@ -40,7 +40,7 @@ def _plan_publico(plan) -> dict:
         "minutos_max_audio": plan.minutos_max_audio,
         "mejor_calidad": plan.mejor_calidad,
         "minutos_guardado": minutos_guardado(plan.nombre),
-        "historial": plan.nombre == "pro",
+        "historial": plan.nombre in config.PLANES_CON_HISTORIAL,
     }
 
 
@@ -50,7 +50,7 @@ def planes():
     with SessionLocal() as db:
         return {
             "dias_periodo": config.DIAS_PERIODO,
-            "planes": [_plan_publico(p) for p in repo_suscripciones.listar_planes(db)],
+            "planes": [_plan_publico(p) for p in repo_suscripciones.listar_planes(db) if p.nombre != "admin"],
         }
 
 
@@ -68,7 +68,7 @@ def mi_plan(usuario: Usuario = Depends(usuario_actual)):
             "mejor_calidad": suscripcion.plan.mejor_calidad,
             "fin_periodo": f"{suscripcion.fin_periodo.isoformat()}Z",
             "minutos_guardado": minutos_guardado(suscripcion.plan.nombre),
-            "historial": suscripcion.plan.nombre == "pro",
+            "historial": suscripcion.plan.nombre in config.PLANES_CON_HISTORIAL,
             # Límites y consumo del plan actual, para el menú de la cuenta y los requisitos del archivo.
             "trabajos_por_mes": suscripcion.plan.trabajos_por_mes,
             "trabajos_usados": repo_trabajos.contar_en_periodo(
