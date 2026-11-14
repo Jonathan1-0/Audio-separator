@@ -1,24 +1,18 @@
-// Sesion compartida por index.html y planes.html: estado unico conectado al backend, barra superior
-// (solo index), menu de perfil, muro de cuenta, pago (simulado) del plan Pro, cancelacion y "Mis audios".
+// Sesión, menú de perfil, plan Pro y "Mis audios".
 (() => {
   'use strict';
 
-  const NOMBRE_PLAN = { gratis: 'Gratis', pro: 'Pro', admin: 'Admin' };   // admin: cuenta de prueba de .env
+  const NOMBRE_PLAN = { gratis: 'Gratis', pro: 'Pro', admin: 'Admin' };
 
-  // =====================================================================================
-  // ESTADO DE SESION (unico, compartido por las dos paginas).
-  //   Sin sesion: null
-  //   Con sesion: { token, nombre, email, plan: 'gratis' | 'pro' | 'admin', cuenta }
-  //     cuenta = respuesta de GET /suscripcion (limites, consumo del periodo, historial, fin_periodo...).
-  // El token se guarda en localStorage para que la sesion siga al recargar y al pasar entre paginas.
-  // =====================================================================================
+  // Sesión: null o { token, nombre, email, plan, cuenta }
+  // El token se guarda en localStorage
   const CLAVE = 'splitter.sesion';
   let sesion = null;
   try { sesion = JSON.parse(localStorage.getItem(CLAVE)) || null; } catch { sesion = null; }
   if (sesion && (!sesion.token || !NOMBRE_PLAN[sesion.plan])) sesion = null;
 
   const $ = (id) => document.getElementById(id);
-  const listeners = new Set();   // otras partes de la pagina (index.js, plans.js) se enteran de los cambios
+  const listeners = new Set();  // avisan a index.js y plans.js de los cambios
 
   const authHeaders = () => (sesion ? { Authorization: `Bearer ${sesion.token}` } : {});
   const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
@@ -37,7 +31,7 @@
     let data = null;
     try { data = await res.json(); } catch { /* sin cuerpo JSON (204) */ }
     if (res.ok) return data;
-    // Token vencido o borrado: la sesion se termina aqui para todas las paginas.
+    // Token vencido: se cierra la sesión
     if (res.status === 401 && !token && sesion) setSesion(null);
     const error = new Error(typeof data?.detail === 'string' ? data.detail
       : res.status >= 500 ? 'El servidor tuvo un problema. Intenta de nuevo en unos minutos.'
@@ -48,7 +42,7 @@
 
   const desdeCuenta = (token, cuenta) => ({ token, nombre: cuenta.nombre, email: cuenta.email, plan: cuenta.plan, cuenta });
 
-  // GET /suscripcion: plan vigente y consumo. Se llama al cargar y despues de cada cambio de plan o trabajo.
+  // Plan vigente y consumo
   async function refrescarCuenta() {
     if (!sesion) return null;
     const token = sesion.token;
@@ -70,10 +64,10 @@
     await iniciarSesion(email, password);
   }
 
-  // Recuperar contrasena: pedir el enlace por correo y, con su codigo, guardar la nueva.
+  // Recuperar contraseña
   const recuperarPassword = (email) => api('/auth/recuperar', { method: 'POST', body: { email } });
   const restablecerPassword = (codigo, password) => api('/auth/restablecer', { method: 'POST', body: { codigo, password } });
-  // Que botones de acceso social mostrar: solo los que tienen sus claves en el servidor.
+  // Botones de Google y Facebook disponibles
   const proveedoresSociales = () => api('/auth/social').catch(() => ({}));
 
   async function cerrarSesion() {
@@ -81,25 +75,24 @@
     setSesion(null);
   }
 
-  // ---------- Dialogos (mismo estilo que el muro de cuenta) ----------
+  // ---------- Diálogos ----------
   function crearDialogo(clase = '') {
     const dialog = document.createElement('dialog');
     dialog.className = `wall ${clase}`.trim();
     dialog.addEventListener('click', (event) => {
-      if (event.target === dialog || event.target.closest('[data-cerrar]')) dialog.close();   // clic en el fondo = cerrar
+      if (event.target === dialog || event.target.closest('[data-cerrar]')) dialog.close();  // clic en el fondo
     });
     document.body.append(dialog);
     return dialog;
   }
 
   // ---------- Muro de cuenta ----------
-  // Se exige cuenta solo para "Contratar Pro". Separar no la pide: sin cuenta se usan los limites de
-  // invitado (por IP, en config.py), parecidos al plan gratis.
+  // Solo "Contratar Pro" exige cuenta
   let wall = null;
   function abrirLogin(modo) {
     const boton = $('nav-register') ? (modo === 'registro' ? $('nav-register') : document.querySelector('.nav-login')) : null;
-    if (boton) boton.click();                                                          // index: dialogo de login existente
-    else location.href = `index.html#${modo === 'registro' ? 'registro' : 'login'}`;   // planes: se abre alla
+    if (boton) boton.click();
+    else location.href = `index.html#${modo === 'registro' ? 'registro' : 'login'}`;
   }
   function pedirCuenta(motivo) {
     if (!wall) {
@@ -124,8 +117,7 @@
   }
 
   // ---------- Contratar Pro (pago simulado) ----------
-  // POST /suscripcion/pro  body { marca, ultimos4 }. El pago real queda pendiente: nunca se pide ni se manda
-  // el numero completo de la tarjeta, solo la marca y los ultimos 4 digitos.
+  // El pago real está pendiente: solo se piden la marca y los últimos 4 dígitos
   let pago = null;
   function contratarPro() {
     if (!sesion) { pedirCuenta('Para contratar Pro necesitas una cuenta. Crea una o inicia sesión y vuelve aquí.'); return; }
@@ -214,7 +206,7 @@
     if (!aviso.open) aviso.showModal();
   }
 
-  // POST /suscripcion/cancelar: pasa al plan gratis desde ahora (el pago simulado no se devuelve).
+  // Pasa al plan gratis desde ahora
   function cancelarPro() {
     if (sesion?.plan !== 'pro') return;
     avisar('¿Cancelar el plan Pro?',
@@ -226,7 +218,6 @@
   }
 
   // ---------- Mis audios (solo Pro) ----------
-  // GET /trabajos. "Abrir" carga el trabajo en el reproductor de index.js (window.abrirTrabajo).
   const NOMBRE_PRESET = { '2stem': 'Voz y música', '4stem': 'Instrumentos (mejor calidad)', '4stem_fast': 'Instrumentos (rápida)', denoise: 'Limpiar ruido' };
   function estadoTrabajo(t) {
     if (t.estado === 'en_cola' || t.estado === 'procesando') return 'En proceso…';
@@ -255,7 +246,7 @@
     try {
       items = await api('/trabajos');
     } catch (err) {
-      if (err.status === 403) { audios.close(); refrescarCuenta(); return; }   // el plan Pro vencio
+      if (err.status === 403) { audios.close(); refrescarCuenta(); return; }  // el plan Pro venció
       lista.replaceChildren(Object.assign(document.createElement('li'), { className: 'history-empty', textContent: err.message }));
       return;
     }
@@ -291,7 +282,7 @@
     }
   }
 
-  // ---------- Barra (solo index.html) ----------
+  // ---------- Barra ----------
   const header = document.querySelector('.site-header');
   if (header) {
     const loginLink = document.querySelector('.nav-login');
@@ -305,7 +296,7 @@
     const profileIcon = profileButton.querySelector('.profile-icon');
     const compact = matchMedia('(max-width: 640px)');
 
-    // Sin sesion el icono solo existe en movil, donde guarda los enlaces colapsados.
+    // Sin sesión el ícono solo existe en móvil
     const menuHasItems = () => Boolean(sesion) || compact.matches;
 
     function renderBar() {
@@ -321,7 +312,7 @@
       planPill.textContent = pro || admin ? NOMBRE_PLAN[sesion.plan] : 'Planes';
       planPill.setAttribute('aria-label', logged ? `Plan actual: ${NOMBRE_PLAN[sesion.plan]}. Ver planes` : 'Ver planes');
       profileInitial.hidden = !logged;
-      profileIcon.style.display = logged ? 'none' : '';   // en un <svg> la propiedad .hidden no existe
+      profileIcon.style.display = logged ? 'none' : '';  // un <svg> no tiene .hidden
       if (logged) {
         const c = sesion.cuenta;
         profileInitial.textContent = (sesion.nombre || sesion.email || '?').trim().charAt(0).toUpperCase();
@@ -336,7 +327,7 @@
       for (const el of profileMenu.querySelectorAll('.menu-guest')) el.hidden = logged;
       for (const el of profileMenu.querySelectorAll('.menu-pro')) el.hidden = !pro;
       for (const el of profileMenu.querySelectorAll('.menu-free')) el.hidden = !logged || pro || admin;
-      if (admin) $('menu-audios').hidden = false;   // admin: tiene "Mis audios", pero no hay Pro que cancelar
+      if (admin) $('menu-audios').hidden = false;
       profileButton.setAttribute('aria-label', logged ? `Cuenta de ${sesion.nombre || sesion.email}` : 'Cuenta');
       if (!menuHasItems()) closeMenu();
     }
@@ -381,12 +372,12 @@
     profileMenu.addEventListener('click', (event) => { if (event.target.closest('a, button')) closeMenu(); });
     compact.addEventListener('change', renderBar);
 
-    // "Registrate" abre el dialogo existente (login.js) y lo pasa a su modo "Crear cuenta".
+    // "Regístrate" abre el diálogo en modo "Crear cuenta"
     registerButton.addEventListener('click', () => {
       setTimeout(() => { const s = $('switch-link'); if (s?.dataset.modeTarget === 'register') s.click(); }, 0);
     });
 
-    // Llegada desde planes.html (#login / #registro): abre el dialogo ya existente.
+    // Llegada desde planes.html (#login / #registro)
     addEventListener('load', () => {
       const destino = location.hash;
       if (destino !== '#login' && destino !== '#registro') return;
@@ -399,14 +390,14 @@
     $('menu-logout').addEventListener('click', () => { cerrarSesion(); });
   }
 
-  // ---------- Punto unico de cambio de estado ----------
+  // ---------- Cambio de sesión ----------
   function setSesion(next) {
     if (next && (!next.token || !NOMBRE_PLAN[next.plan])) { console.warn('Sesión inválida', next); return; }
     sesion = next || null;
     try { if (sesion) localStorage.setItem(CLAVE, JSON.stringify(sesion)); else localStorage.removeItem(CLAVE); } catch { /* sin almacenamiento */ }
     listeners.forEach((fn) => fn());
   }
-  // Cambios hechos en la otra pestana/pagina.
+  // Cambios hechos en otra pestaña
   addEventListener('storage', (event) => {
     if (event.key !== CLAVE) return;
     try { sesion = JSON.parse(event.newValue) || null; } catch { sesion = null; }
@@ -429,10 +420,10 @@
     proveedoresSociales,
   });
 
-  // Regreso de Google o Facebook: el servidor vuelve a esta pagina con "#sesion=TOKEN" o "#error=MENSAJE".
+  // Regreso de Google o Facebook: #sesion=TOKEN o #error=MENSAJE
   const regreso = location.hash.match(/^#(sesion|error)=(.+)$/);
   if (regreso) {
-    history.replaceState(null, '', location.pathname + location.search);   // el token no se queda en la barra
+    history.replaceState(null, '', location.pathname + location.search);
     if (regreso[1] === 'sesion') {
       const token = regreso[2];
       api('/suscripcion', { token })
@@ -444,5 +435,5 @@
   }
 
   listeners.forEach((fn) => fn());
-  refrescarCuenta();   // el plan pudo cambiar (vencer, cancelarse) desde la ultima visita
+  refrescarCuenta();
 })();

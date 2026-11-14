@@ -96,22 +96,22 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .primary-button:disabled { background: var(--bg-2); color: var(--text-2); cursor: not-allowed; }
 .nav-cta { min-height: 40px; padding: 8px 20px; font-size: 14px; }
 .workspace { position: relative; padding-top: 72px; overflow-x: clip; }
-/* Humo de fondo: fijo y fuera del snapshot de liquidGL, que ignora lo fijo. */
+/* Humo de fondo */
 .smoke-canvas { position: fixed; inset: 0; z-index: -2; display: block; width: 100%; height: 100%; pointer-events: none; }
-/* Campo de luz tras las zonas elegibles: es lo que el vidrio refracta. Va bajo el canvas de liquidGL (z-index negativo). */
+/* Luz detrás de las opciones (lo que refracta el vidrio) */
 .mode-step, .tracks-step { position: relative; }
-/* Luz fria diagonal sobre las tarjetas: va en la captura de liquidGL (es estatica) para que el vidrio la refracte. */
+/* Luz diagonal sobre las tarjetas */
 .light { position: absolute; inset: -140px -40px -60px; z-index: -1; pointer-events: none; background: url("light.svg") center / 100% 100% no-repeat; will-change: transform; animation: light-drift 10s ease-in-out infinite alternate; }
 @keyframes light-drift { from { transform: translate3d(-34px, -6px, 0); } to { transform: translate3d(34px, 6px, 0); } }
 .intro { padding: var(--section-space) max(24px, calc((100% - 1216px) / 2)); scroll-margin-top: 88px; }
-/* Un solo bloque compacto bajo el hero: las tres secciones (.step) comparten una rejilla con separaciones chicas. */
+/* Los tres pasos del formulario */
 .flow-block { padding: 8px max(24px, calc((100% - 1216px) / 2)) 56px; scroll-margin-top: 88px; }
 .step { scroll-margin-top: 88px; }
 .studio-flow { display: grid; grid-template-columns: minmax(0, 1fr); }
-/* Bloque A (01) respira con padding propio; el hueco hacia el bloque B (02 + 03) es solo espacio: sin lineas ni cambio de fondo. */
+/* Paso 01 */
 .mode-step { grid-column: 1 / -1; padding-top: clamp(48px, 6vw, 88px); padding-bottom: clamp(80px, 10vw, 150px); }
 .mode-step h2 { font-size: clamp(30px, 3.6vw, 46px); }
-/* Bloque B (02 + 03): una sola columna, centrada, con aire entre eyebrow, titulo, contenido y entre pasos. */
+/* Pasos 02 y 03 */
 .upload-step, .tracks-step { text-align: center; }
 .upload-step { margin-bottom: clamp(56px, 7vw, 96px); }
 .upload-step .step-heading, .tracks-step .step-heading { margin: 0 auto clamp(28px, 3.5vw, 44px); }
@@ -135,22 +135,22 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .mode-step .step-heading { margin-bottom: 32px; }
 .mode-grid { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .mode-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 36px 32px; border-radius: 32px; outline: 2px solid transparent; outline-offset: 3px; }
-/* Opciones elegibles: sin marcar, transparentes con borde; marcadas, el vidrio (glass.js) y texto mas claro. */
+/* Opciones del formulario */
 :is(.mode-card, .quality-pill, .track-chip) { border: 1px solid var(--line); background: transparent; color: var(--text-2); }
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { border-color: var(--line-strong); color: var(--text); }
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) :is(.mode-description, .mode-caption) { color: var(--text); }
 .no-glass :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { background: var(--bg-2); }
-/* Lentes de liquidGL (glass.js): vacias y sin eventos; el vidrio lo dibuja el canvas de la libreria. */
-/* Elegir una opcion se nota al instante: sin fundido de color en la etiqueta. */
+/* Lentes de vidrio (glass.js) */
+
 :is(.mode-card, .quality-pill, .track-chip) { transition: none; }
 .lente, .lente-pastilla { position: absolute; z-index: 1; pointer-events: none; }
 .lente { top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
-/* Textura desfasada tras un cambio de altura: las lentes de abajo se ocultan hasta recapturar (glass.js). */
+/* Lentes ocultas mientras se recaptura */
 .glass-stale :is(#lente-calidad, .lente-pastilla) { display: none !important; }
 #lente-modos { border-radius: 32px; }
 #lente-calidad { border-radius: 30px; }
 .lente-pastilla { inset: 0; border-radius: inherit; }
-/* Mientras liquidGL captura la pagina, las secciones aun sin revelar cuentan como visibles. */
+/* Durante la captura todo cuenta como visible */
 .snap-ready :is(.step, .flow-block) { opacity: 1 !important; transform: none !important; transition: none !important; }
 .mode-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 7px; }
 .mini-spectrum { display: flex; gap: 4px; height: 88px; align-items: center; margin-bottom: 28px; }
@@ -187,7 +187,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .action-row { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 20px; }
 #tracks-section:not([hidden]) + .action-row { margin-top: clamp(32px, 4vw, 44px); }
 .action-hint { max-width: 40ch; margin: 0; color: var(--text-2); font-size: 15px; }
-/* Perfil: circulo al final de la barra, con menu desplegable alineado a la derecha. */
+/* Perfil y su menú */
 .profile { position: relative; }
 .profile-button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--bg-2); color: var(--text); font-size: 15px; font-weight: 600; line-height: 1; }
 .profile-button:hover, .profile-button[aria-expanded="true"] { background: var(--panel-hover); }
@@ -201,7 +201,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .menu-item:hover { background: var(--panel-hover); }
 .menu-item:focus-visible { outline-offset: -2px; }
 .menu-mobile { display: none; }
-/* Seccion de planes */
+/* Planes */
 .plans { position: relative; isolation: isolate; overflow: hidden; padding: var(--section-space) max(24px, calc((100% - 1216px) / 2)); text-align: center; }
 .plans-bg { position: absolute; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; background: radial-gradient(ellipse 70% 50% at 50% 35%, color-mix(in srgb, var(--accent) 9%, var(--bg)), var(--bg) 75%); }
 .plans-bg canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 400ms var(--ease); }
@@ -212,12 +212,6 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .plans h2, .plans-title { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
 .plans .eyebrow { margin-bottom: 20px; }
 .plans-lead { max-width: 46ch; margin: 20px auto 0; color: var(--text-2); font-size: 18px; line-height: 1.5; text-wrap: pretty; }
-.billing { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; margin-top: clamp(28px, 3.5vw, 40px); padding: 4px; border: 1px solid var(--line); border-radius: 999px; }
-.billing-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg-2); transition: transform 300ms var(--ease); }
-.billing[data-billing="anual"] .billing-thumb { transform: translateX(100%); }
-.billing-option { position: relative; min-height: 40px; padding: 8px 22px; border: 0; border-radius: 999px; background: none; color: var(--text-2); font-size: 15px; font-weight: 500; white-space: nowrap; transition: color 200ms var(--ease); }
-.billing-option[aria-checked="true"] { color: var(--text); }
-.billing-option small { margin-left: 6px; color: var(--accent); font-size: 12px; font-weight: 500; }
 .plans-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; max-width: 880px; margin: clamp(32px, 4vw, 48px) auto 0; text-align: left; }
 .plan-card { position: relative; display: flex; flex-direction: column; padding: 36px 32px 32px; border: 1px solid var(--line); border-radius: 28px; background: color-mix(in srgb, var(--bg) 82%, transparent); }
 .plan-card.is-featured { border-color: var(--accent); }
@@ -236,8 +230,6 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .nav-register:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--text) 88%, var(--bg)); }
 .nav-register:active { transform: none; }
 .plans-page { min-height: 100dvh; }
-.plans-header { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; max-width: 1280px; min-height: 72px; margin-inline: auto; padding: 12px 0; }
-.plans-header .brand { grid-column: 2; }
 .back-link { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--text-2); font-size: 15px; transition: color 200ms var(--ease); }
 .back-link:hover { color: var(--text); }
 .back-link svg { transition: transform 200ms var(--ease); }
@@ -252,7 +244,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .wall-actions button { width: 100%; }
 .wall-close { margin-top: 12px; padding: 8px; border: 0; background: none; color: var(--text-2); font-size: 14px; }
 .wall-close:hover { color: var(--text); }
-/* Pago de Pro, avisos y "Mis audios" (account.js): mismos dialogos que el muro. */
+/* Diálogos de pago, avisos y "Mis audios" */
 .wall-form { text-align: left; }
 .wall-form .login-fields { gap: 16px; }
 .wall-form h2, .wall-form p { margin-bottom: 0; }
@@ -312,14 +304,13 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .reveal-pending { opacity: 0; transform: translateY(16px); }
 .reveal-ready { transition: opacity 500ms ease, transform 500ms ease; }
 .reveal-ready.is-visible, .reveal-ready:focus-within { opacity: 1; transform: none; }
-/* ---------- Encabezado unico (index y planes) ---------- */
+/* Encabezado */
 .plans-page .plans { padding-top: 72px; }
 .nav-help:hover { color: var(--accent); }
 .nav-planes[aria-current="page"] { color: var(--text); text-decoration: underline; text-underline-offset: 6px; }
 a.nav-register { display: inline-flex; align-items: center; }
 
-/* ---------- Vidrio en los iconos ---------- */
-/* Misma receta en todos: relleno translucido, brillo arriba, sombra abajo y desenfoque del fondo. */
+/* Íconos de vidrio */
 :root {
   --glass-fill: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.05) 48%, rgba(255,255,255,.1));
   --glass-line: rgba(255,255,255,.24);
@@ -342,11 +333,11 @@ a.nav-register { display: inline-flex; align-items: center; }
 .plan-features li::before { left: 7px; top: .5em; z-index: 1; border-color: var(--text); }
 .plan-features li::after { content: ""; position: absolute; left: 0; top: .1em; width: 24px; height: 24px; border: 1px solid var(--glass-line); border-radius: 50%; background: var(--glass-fill); box-shadow: var(--glass-shadow); }
 
-/* Acceso con Google y Facebook: los botones visibles se reparten el ancho. */
+/* Botones de Google y Facebook */
 .social-row { display: flex; }
 .social-row .social-button { flex: 1; }
 
-/* ---------- Resultado: volver y restablecer ---------- */
+/* Resultado */
 button.back-link { padding: 0; border: 0; background: none; font-family: inherit; }
 .results-panel > .back-link { margin: -8px 0 8px; }
 .mix-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; margin-top: 16px; }
@@ -354,7 +345,7 @@ button.back-link { padding: 0; border: 0; background: none; font-family: inherit
 .mix-reset { min-height: 44px; padding: 8px 18px; font-size: 15px; }
 .mix-reset:disabled { cursor: default; opacity: .55; }
 
-/* ---------- Ayuda: globos y preguntas frecuentes ---------- */
+/* Ayuda */
 .field-hint { color: var(--text-2); font-size: 13px; font-weight: 400; }
 p.field-hint { margin: -4px 0 0; }
 .file-keys { margin-top: 6px; }
@@ -396,7 +387,6 @@ p.field-hint { margin: -4px 0 0; }
   .workspace-footer { align-items: flex-start; flex-direction: column; gap: 12px; }
 }
 @media (max-width: 640px) {
-  .plans-header { padding-inline: 0; }
   .nav-how, .nav-planes, .nav-help, .nav-login { display: none; }
   .menu-mobile { display: flex; }
   .nav-actions { gap: 12px; }

@@ -1,4 +1,4 @@
-"""Pruebas de recuperar la contraseña con el enlace del correo."""
+"""Pruebas de recuperar la contraseña."""
 import re
 import uuid
 
@@ -11,10 +11,10 @@ PASSWORD = "clave-segura-1"
 
 @pytest.fixture
 def buzon(monkeypatch):
-    """En vez de enviar correos, los guarda en una lista para poder leerlos en la prueba."""
+    """Guarda los correos en una lista en vez de enviarlos."""
     recibidos = []
     monkeypatch.setattr(correo, "enviar", lambda destino, asunto, texto: recibidos.append((destino, texto)))
-    monkeypatch.setattr(recuperacion._por_ip, "max_events", 0)  # sin límite por IP durante las pruebas
+    monkeypatch.setattr(recuperacion._por_ip, "max_events", 0)  # sin límite por IP
     return recibidos
 
 
@@ -85,7 +85,7 @@ def test_codigo_inventado_o_alterado(cliente, buzon):
 
 def test_enlace_vencido(cliente, buzon, monkeypatch):
     email = _cuenta_nueva(cliente)
-    monkeypatch.setattr(recuperacion.config, "MINUTOS_RECUPERACION", -1)  # nace vencido
+    monkeypatch.setattr(recuperacion.config, "MINUTOS_RECUPERACION", -1)  # ya vencido
     cliente.post("/auth/recuperar", json={"email": email})
     res = cliente.post("/auth/restablecer", json={"codigo": _codigo_del_correo(buzon[0][1]), "password": "otra-clave-22"})
     assert res.status_code == 400

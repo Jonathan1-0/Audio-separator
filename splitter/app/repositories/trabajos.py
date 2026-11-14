@@ -44,7 +44,7 @@ def terminar(
     pistas: Dict[str, str],
     expira_en: datetime,
 ) -> None:
-    """Guarda el final y una fila en resultados por pista."""
+    """Guarda el final y una fila por pista."""
     trabajo = db.get(Trabajo, trabajo_id)
     if trabajo is None:
         return
@@ -56,7 +56,7 @@ def terminar(
 
 
 def marcar_borrado(db: Session, trabajo_id: str, ahora: datetime, cancelado: bool) -> None:
-    """La fila se queda para el historial y las cuotas; los archivos ya no están."""
+    """Marca el trabajo como borrado; la fila se queda."""
     trabajo = obtener(db, trabajo_id)
     if trabajo is None:
         return
@@ -68,7 +68,7 @@ def marcar_borrado(db: Session, trabajo_id: str, ahora: datetime, cancelado: boo
 
 
 def listar_pendientes(db: Session) -> List[Trabajo]:
-    """Trabajos que quedaron sin terminar, del más antiguo al más nuevo."""
+    """Trabajos sin terminar."""
     consulta = (
         select(Trabajo).where(Trabajo.estado.in_(("en_cola", "procesando"))).order_by(Trabajo.creado_en)
     )
@@ -76,7 +76,7 @@ def listar_pendientes(db: Session) -> List[Trabajo]:
 
 
 def listar_por_usuario(db: Session, usuario_id: int, desde: datetime) -> List[Trabajo]:
-    """Historial del usuario desde esa fecha, del más nuevo al más antiguo."""
+    """Historial del usuario desde esa fecha."""
     consulta = (
         select(Trabajo)
         .options(selectinload(Trabajo.resultados))

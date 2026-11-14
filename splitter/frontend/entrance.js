@@ -1,4 +1,4 @@
-// Entrada de la pagina: barras del logo y h1. Si este modulo no carga, la pagina se ve completa.
+// Animación de entrada del logo y el título.
 import { animate, stagger } from 'https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm';
 
 const EASE = [0.22, 1, 0.36, 1];
@@ -28,20 +28,20 @@ function enterTitle() {
     return index ? [' ', wrap] : [wrap];
   }));
   const letters = [...title.querySelectorAll('[style*="blur"]')];
-  // Orden aleatorio (Fisher-Yates): rango de llegada de cada letra.
+  // Orden aleatorio de las letras
   const order = letters.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
   const duration = 0.2;
-  const step = (0.4 - duration) / Math.max(letters.length - 1, 1); // 100ms -> 500ms
+  const step = (0.4 - duration) / Math.max(letters.length - 1, 1);
   const done = letters.map((letter, i) => animate(
     letter,
     { opacity: [0, 1], filter: ['blur(10px)', 'blur(0px)'] },
     { duration, ease: EASE, delay: 0.1 + order[i] * step },
   ).finished);
-  // Un frame despues, para que Motion termine de fijar el estado final antes de limpiarlo.
+  // Un cuadro después se limpian los estilos
   Promise.all(done).then(() => requestAnimationFrame(() => letters.forEach((letter) => {
     for (const prop of ['will-change', 'opacity', 'filter']) letter.style.removeProperty(prop);
   })));

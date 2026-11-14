@@ -20,12 +20,12 @@ _CODEC_ARGS = {
 
 
 def _tmp_path(dst: Path) -> Path:
-    """Un temporal por petición: si dos piden lo mismo a la vez, no se pisan."""
+    """Archivo temporal único."""
     return dst.with_name(f"{dst.name}.{uuid.uuid4().hex}.part")
 
 
 def _publish(tmp: Path, dst: Path) -> None:
-    """En Windows falla si otra petición está enviando `dst`; entonces ya hay una copia válida."""
+    """Mueve el temporal a su lugar."""
     try:
         tmp.replace(dst)
     except PermissionError:
@@ -43,7 +43,7 @@ def ffprobe_available() -> bool:
 
 
 def audio_duration(path: Path) -> float:
-    """Segundos. Lanza ValueError si no es audio legible."""
+    """Duración en segundos."""
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
@@ -59,7 +59,7 @@ def audio_duration(path: Path) -> float:
 
 
 def convert(src: Path, fmt: str, *, preview: bool = False) -> Path:
-    """Convierte el WAV y deja el resultado al lado como caché."""
+    """Convierte el WAV al formato pedido y lo deja guardado."""
     fmt = fmt.lower()
     if fmt not in config.OUTPUT_FORMATS:
         raise ValueError(f"Formato no soportado: {fmt}")
@@ -96,7 +96,7 @@ def build_zip(stems: Dict[str, Path], fmt: str, base_name: str, dest_dir: Path) 
         return zip_path
     tmp = _tmp_path(zip_path)
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:  # el audio ya viene comprimido
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:
             for stem, wav in stems.items():
                 out = convert(wav, fmt)
                 zf.write(out, arcname=f"{base_name} - {stem}.{fmt}")

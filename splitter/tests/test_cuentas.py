@@ -32,7 +32,7 @@ def test_planes_gratis_y_pro(cliente):
 
 
 def _sesion(cliente) -> dict:
-    """Registra una cuenta nueva, inicia sesión y devuelve la cabecera con su token."""
+    """Crea una cuenta, inicia sesión y devuelve la cabecera con su token."""
     email, _ = _registrar(cliente)
     token = cliente.post("/auth/login", json={"email": email, "password": "clave-segura-1"}).json()["token"]
     return {"Authorization": f"Bearer {token}"}

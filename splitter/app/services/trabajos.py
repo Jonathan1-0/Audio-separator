@@ -1,4 +1,4 @@
-"""Historial de trabajos del usuario ("Mis audios"). Solo lo tiene el plan pro."""
+"""Historial de trabajos ("Mis audios"), solo plan pro."""
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -16,7 +16,7 @@ def _fecha(valor: Optional[datetime]) -> Optional[str]:
 
 
 def historial(usuario_id: int) -> List[dict]:
-    """Trabajos de la última semana; los que ya vencieron salen sin pistas para descargar."""
+    """Trabajos de la última semana."""
     ahora = ahora_utc()
     with SessionLocal() as db:
         plan = plan_vigente(db, usuario_id)
@@ -36,7 +36,6 @@ def historial(usuario_id: int) -> List[dict]:
                 "mensaje_error": t.mensaje_error,
                 "creado_en": _fecha(t.creado_en),
                 "terminado_en": _fecha(t.terminado_en),
-                # Disponible = todavía se puede abrir y descargar.
                 "disponible": any(r.expira_en > ahora for r in t.resultados),
                 "expira_en": _fecha(max((r.expira_en for r in t.resultados), default=None)),
                 "resultados": [

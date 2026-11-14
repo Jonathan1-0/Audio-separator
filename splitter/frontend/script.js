@@ -1,7 +1,7 @@
-// Presentation only: index.js owns form state and validation.
+// Solo presentación; el formulario lo maneja index.js.
 (() => {
   'use strict';
-  // Aged Gold -> Soft Champagne -> Warm Stone -> Muted Olive: cada barra mezcla los dos tonos vecinos segun su posicion.
+  // Cada barra mezcla los dos tonos vecinos
   const TONES = ['voz', 'bateria', 'bajo', 'otros'].map(name => `var(--stem-${name})`);
   function toneAt(position) {
     const scaled = position * (TONES.length - 1);
@@ -34,9 +34,9 @@
     drawWave(element, names, Math.round(32 / names.length));
   });
 
-  // CSS handles the reveal. No scroll loop or animation library is needed.
+  // La aparición la hace el CSS
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
-  // El formulario es un solo bloque (.flow-block): se revela entero, con el formulario, el proceso o los resultados dentro.
+  // El formulario se revela como un solo bloque
   const sections = [...document.querySelectorAll('.flow-block')];
   let observer;
   function setupReveals() {
@@ -54,7 +54,7 @@
       });
     }, { threshold: 0, rootMargin: '0px 0px -32px 0px' });
     sections.forEach(section => {
-      // Content already in view remains visible, avoiding a flash on load.
+      // Lo que ya está a la vista no se anima
       const box = section.getBoundingClientRect();
       if (box.top < innerHeight && box.bottom > 0) section.classList.add('is-visible');
       if (!section.classList.contains('is-visible')) section.classList.add('reveal-pending');

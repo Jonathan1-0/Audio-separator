@@ -1,4 +1,4 @@
-"""Pago simulado del plan pro. Nunca se recibe el número completo de la tarjeta."""
+"""Pago simulado del plan pro."""
 import secrets
 from datetime import timedelta
 
@@ -11,7 +11,7 @@ from .cuotas import suscripcion_vigente
 
 
 def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
-    """Registra el método de pago y el pago, y cambia al usuario al plan pro."""
+    """Registra el pago y pasa al usuario al plan pro."""
     marca = marca.strip()
     if not marca or len(marca) > 30:
         raise HTTPException(400, "La marca debe tener entre 1 y 30 caracteres.")
@@ -36,7 +36,7 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
         )
         id_transaccion = f"txn_sim_{secrets.token_hex(16)}"
         repo_suscripciones.crear_pago(db, nueva.id, metodo.id, plan.precio_mensual, "pagado", id_transaccion)
-        db.commit()  # todo se guarda junto, o nada
+        db.commit()
         return {
             "plan": plan.nombre,
             "monto": str(plan.precio_mensual),
@@ -47,12 +47,7 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
 
 
 def cancelar_pro(usuario_id: int) -> dict:
-    """Pasa al usuario al plan gratis desde ahora. El plan pro no se renueva solo, así que cancelar
-    al final del periodo no cambiaría nada; el pago (simulado) no se devuelve.
-
-    El plan gratis sigue con las mismas fechas del periodo pro: los trabajos que ya se hicieron en él
-    siguen contando, así que cancelar no da trabajos nuevos. Al terminar ese periodo empieza uno
-    gratis normal."""
+    """Pasa al usuario al plan gratis desde ahora."""
     with SessionLocal() as db:
         actual = suscripcion_vigente(db, usuario_id)
         if actual.plan.nombre != "pro":
@@ -63,5 +58,5 @@ def cancelar_pro(usuario_id: int) -> dict:
         nueva = repo_suscripciones.crear_suscripcion(
             db, usuario_id, gratis, actual.inicio_periodo, actual.fin_periodo
         )
-        db.commit()  # todo se guarda junto, o nada
+        db.commit()
         return {"plan": "gratis", "fin_periodo": f"{nueva.fin_periodo.isoformat()}Z"}

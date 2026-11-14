@@ -1,9 +1,4 @@
-"""Entrar con Google o Facebook (OAuth 2).
-
-Pasos: 1) se manda al usuario a la página del proveedor; 2) el proveedor lo regresa con un "code";
-3) el servidor cambia ese code por un permiso y pide el correo y el nombre; 4) con ese correo se
-busca la cuenta (o se crea) y se abre la sesión igual que en el login normal.
-"""
+"""Entrar con Google o Facebook (OAuth 2)."""
 import json
 import secrets
 import urllib.error
@@ -41,7 +36,7 @@ PROVEEDORES = {
 
 
 def disponibles() -> dict:
-    """Qué proveedores tienen sus claves en .env; la página solo muestra esos botones."""
+    """Proveedores que tienen sus claves en .env."""
     return {clave: bool(p["id"] and p["secreto"]) for clave, p in PROVEEDORES.items()}
 
 
@@ -55,12 +50,12 @@ def _proveedor(clave: str) -> dict:
 
 
 def _url_regreso(clave: str, base: str) -> str:
-    """A dónde regresa el proveedor. Debe ser idéntica a la registrada en Google o Facebook."""
+    """Dirección a la que regresa el proveedor."""
     return f"{base}/auth/social/{clave}/regreso"
 
 
 def url_de_inicio(clave: str, estado: str, base: str) -> str:
-    """Dirección del proveedor a la que se manda al usuario para que dé permiso."""
+    """Dirección del proveedor para pedir permiso."""
     proveedor = _proveedor(clave)
     datos = {
         "client_id": proveedor["id"],
@@ -73,7 +68,7 @@ def url_de_inicio(clave: str, estado: str, base: str) -> str:
 
 
 def _pedir_json(url: str, datos: dict = None, permiso: str = "") -> dict:
-    """Llama al proveedor y devuelve su respuesta. Con `datos` es POST; sin ellos, GET."""
+    """Llama al proveedor. Con `datos` es POST; sin ellos, GET."""
     cuerpo = urllib.parse.urlencode(datos).encode() if datos else None
     peticion = urllib.request.Request(url, data=cuerpo, headers={"Accept": "application/json"})
     if permiso:
@@ -86,7 +81,7 @@ def _pedir_json(url: str, datos: dict = None, permiso: str = "") -> dict:
 
 
 def obtener_perfil(clave: str, code: str, base: str) -> dict:
-    """Cambia el code por un permiso y pide el correo y el nombre."""
+    """Cambia el code por el correo y el nombre."""
     proveedor = _proveedor(clave)
     respuesta = _pedir_json(proveedor["url_token"], {
         "client_id": proveedor["id"],
@@ -100,19 +95,18 @@ def obtener_perfil(clave: str, code: str, base: str) -> dict:
         raise HTTPException(502, "No se pudo completar el acceso con ese proveedor. Intenta de nuevo.")
     perfil = _pedir_json(proveedor["url_perfil"], permiso=permiso)
     email = (perfil.get("email") or "").strip().lower()
-    # Google avisa si el correo está verificado; sin eso, alguien podría entrar a una cuenta ajena.
+    # Google debe confirmar que el correo está verificado
     if not email or (clave == "google" and not perfil.get("email_verified")):
         raise HTTPException(400, f"{proveedor['nombre']} no compartió un correo verificado. Usa tu correo y contraseña.")
     return {"email": email, "nombre": (perfil.get("name") or email.split("@")[0])[:100]}
 
 
 def entrar(email: str, nombre: str) -> dict:
-    """Abre sesión con ese correo. Si no tenía cuenta, se crea con el plan gratis."""
+    """Abre sesión con ese correo; si no tenía cuenta, la crea."""
     with SessionLocal() as db:
         usuario = repo_usuarios.buscar_por_email(db, email)
         if usuario is None:
-            # No tiene contraseña propia: se guarda una al azar que nadie conoce.
-            # Si un día quiere entrar con contraseña, usa "Olvidé mi contraseña".
+            # Sin contraseña propia: se guarda una al azar
             usuario = repo_usuarios.crear(db, email, nombre, auth.crear_hash(secrets.token_urlsafe(32)))
             crear_periodo_gratis(db, usuario.id)
         if usuario.estado != "activo":

@@ -1,4 +1,4 @@
-"""Rutas del plan: contratar pro (pago simulado), cancelarlo y consultar el vigente."""
+"""Rutas del plan: contratar pro, cancelar y consultar."""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -21,13 +21,13 @@ class DatosPago(BaseModel):
 
 @router.post("/pro", status_code=201)
 def contratar_pro(datos: DatosPago, usuario: Usuario = Depends(usuario_actual)):
-    """Cambia al usuario al plan pro con un pago simulado."""
+    """Pasa al usuario al plan pro (pago simulado)."""
     return pagos.contratar_pro(usuario.id, datos.marca, datos.ultimos4)
 
 
 @router.post("/cancelar")
 def cancelar_pro(usuario: Usuario = Depends(usuario_actual)):
-    """Cancela el plan pro y el usuario pasa al plan gratis desde ahora."""
+    """Cancela el plan pro."""
     return pagos.cancelar_pro(usuario.id)
 
 
@@ -46,7 +46,7 @@ def _plan_publico(plan) -> dict:
 
 @router.get("/planes")
 def planes():
-    """Los planes tal como están en la base; la página de planes se pinta con esto (no pide sesión)."""
+    """Planes disponibles."""
     with SessionLocal() as db:
         return {
             "dias_periodo": config.DIAS_PERIODO,
@@ -56,8 +56,7 @@ def planes():
 
 @router.get("")
 def mi_plan(usuario: Usuario = Depends(usuario_actual)):
-    """Cuenta y plan vigente: la página lo usa para el menú, los límites, el historial (solo pro) y cuánto
-    se guardan los audios."""
+    """Cuenta, plan vigente y consumo."""
     with SessionLocal() as db:
         suscripcion = suscripcion_vigente(db, usuario.id)
         pro = repo_suscripciones.buscar_plan(db, "pro")
@@ -69,13 +68,11 @@ def mi_plan(usuario: Usuario = Depends(usuario_actual)):
             "fin_periodo": f"{suscripcion.fin_periodo.isoformat()}Z",
             "minutos_guardado": minutos_guardado(suscripcion.plan.nombre),
             "historial": suscripcion.plan.nombre in config.PLANES_CON_HISTORIAL,
-            # Límites y consumo del plan actual, para el menú de la cuenta y los requisitos del archivo.
             "trabajos_por_mes": suscripcion.plan.trabajos_por_mes,
             "trabajos_usados": repo_trabajos.contar_en_periodo(
                 db, usuario.id, suscripcion.inicio_periodo, suscripcion.fin_periodo
             ),
             "minutos_max_audio": suscripcion.plan.minutos_max_audio,
-            # Para la oferta de "Pasarse a Pro" en la página.
             "pro": {
                 "precio_mensual": str(pro.precio_mensual),
                 "trabajos_por_mes": pro.trabajos_por_mes,

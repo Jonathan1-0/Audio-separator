@@ -1,4 +1,4 @@
-"""Pruebas de entrar con Google o Facebook. No se llama a los proveedores reales: se simulan sus respuestas."""
+"""Pruebas de entrar con Google o Facebook (respuestas simuladas)."""
 import uuid
 from urllib.parse import parse_qs, urlparse
 
@@ -9,7 +9,7 @@ from app.services import social
 
 @pytest.fixture
 def proveedor_falso(monkeypatch):
-    """Pone claves de mentira y hace que el "proveedor" devuelva el perfil que diga la prueba."""
+    """Pone claves de prueba y simula la respuesta del proveedor."""
     perfil = {"email": f"social_{uuid.uuid4().hex[:8]}@ejemplo.com", "name": "Persona Social", "email_verified": True}
     for clave in ("google", "facebook"):
         monkeypatch.setitem(social.PROVEEDORES[clave], "id", "id-de-prueba")
@@ -23,7 +23,7 @@ def proveedor_falso(monkeypatch):
 
 
 def _empezar(cliente, proveedor):
-    """Primer paso: el servidor manda al proveedor. Devuelve el "estado" que se debe traer de regreso."""
+    """Inicia el acceso y devuelve el estado y la dirección."""
     res = cliente.get(f"/auth/social/{proveedor}", follow_redirects=False)
     assert res.status_code == 307
     return parse_qs(urlparse(res.headers["location"]).query)["state"][0], res.headers["location"]

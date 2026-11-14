@@ -1,8 +1,8 @@
-// planes.html: tarjetas de los planes (salen de la base: GET /suscripcion/planes) y fondo animado ligero.
+// Página de planes: tarjetas y fondo animado.
 (() => {
   'use strict';
 
-  // Los precios y limites viven SOLO en la base (seed.py los crea). Aqui solo van los textos.
+  // Precios y límites vienen de la base; aquí solo van los textos
   const NOMBRE = { gratis: 'Gratis', pro: 'Pro' };
   const PLAN_DESTACADO = 'pro';
 
@@ -11,7 +11,7 @@
   const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
   const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
-  let planes = null;       // [{ nombre, precio_mensual, trabajos_por_mes, minutos_max_audio, mejor_calidad, minutos_guardado, historial }]
+  let planes = null;
   let diasPeriodo = 30;
 
   function guardado(minutos) {
@@ -34,7 +34,7 @@
     plansGrid.replaceChildren(p);
   }
 
-  // Se vuelve a pintar cuando cambia la sesion (account.js avisa al cargar y en cada cambio).
+  // Se vuelve a pintar cuando cambia la sesión
   function renderPlans() {
     if (!planes) return;
     const sesion = window.getSesion();
@@ -79,10 +79,10 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = id === PLAN_DESTACADO ? 'primary-button plan-button' : 'secondary-button plan-button';
-      // Sin sesion se cuenta como plan gratis (el invitado tiene los mismos limites).
+      // Sin sesión cuenta como plan gratis
       const isCurrent = id === 'gratis' ? planActual !== 'pro' && planActual !== 'admin' : planActual === id;
       if (planActual === 'admin') {
-        // La cuenta de administrador ya tiene todo; no compra ni cancela.
+        // El administrador no compra ni cancela
         button.textContent = 'Incluido en tu cuenta de administrador';
         button.disabled = true;
       } else if (isCurrent) {
@@ -90,7 +90,7 @@
         button.disabled = true;
       } else if (id === 'pro') {
         button.textContent = 'Contratar Pro';
-        button.addEventListener('click', () => window.contratarPro());   // sin sesion, account.js muestra el muro
+        button.addEventListener('click', () => window.contratarPro());
       } else {
         button.textContent = 'Volver a Gratis';
         button.addEventListener('click', () => window.cancelarPro());
@@ -118,25 +118,13 @@
   window.onSesion(renderPlans);
   cargarPlanes();
 
-  // =====================================================================================
-  // FONDO ANIMADO (ligero)
-  // El efecto de referencia (21st.dev "jelly-animated-hero") es un VIDEO pregrabado, no un shader. Para
-  // que no trabe, el video NO se muestra directamente (con blur/blend CSS a pantalla completa): se dibuja
-  // en un canvas diminuto y se escala por CSS.
-  //   - Resolucion reducida: 320x180 (nunca devicePixelRatio completo); baja a 160x90 si va justo.
-  //   - Maximo 30 fps, con control de tiempo sobre requestAnimationFrame.
-  //   - Pausa con la pestana oculta (document.hidden) y con el canvas fuera de pantalla.
-  //   - Degradacion automatica: se mide el tiempo entre cuadros; si no llega, baja resolucion y, si aun
-  //     asi no llega, cae al fondo estatico y deja de decodificar el video.
-  //   - Estatico directo en movil, con prefers-reduced-motion, ahorro de datos, poca memoria o sin canvas.
-  // El tinte gris --smoke-silver (el del humo del hero) se aplica dentro del canvas (mezcla "color"): el video violeta queda gris.
-  // TODO: el video se pide a su URL original; si se quiere depender de uno mismo, alojar una copia propia.
-  // =====================================================================================
+  // ---------- Fondo animado ----------
+  // Un video dibujado en un canvas pequeño. Si el equipo no alcanza, queda un fondo fijo.
   const FONDO_VIDEO = 'https://ease-one.vercel.app/bg/something.mp4';
   const MAX_FPS = 30, INTERVALO = 1000 / MAX_FPS;
   const NIVELES = [[320, 180], [160, 90]];
-  const UMBRAL_MS = 50;      // promedio entre cuadros por encima de esto (< 20 fps) = no llega
-  const VENTANA = 45;        // cuadros por medicion
+  const UMBRAL_MS = 50;  // más de esto entre cuadros = va lento
+  const VENTANA = 45;  // cuadros por medición
 
   const section = $('planes');
   const bg = section.querySelector('.plans-bg');
@@ -168,7 +156,7 @@
     canvas = document.createElement('canvas');
     ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) { estaticoYa('sin-canvas'); return; }
-    const plata = getComputedStyle(document.documentElement).getPropertyValue('--smoke-silver').trim();   // mismo gris del humo del hero
+    const plata = getComputedStyle(document.documentElement).getPropertyValue('--smoke-silver').trim();
     if (plata) tinte = `rgb(${plata.split(/\s+/).join(',')})`;
     ajustarCanvas();
     bg.prepend(canvas);
@@ -185,19 +173,19 @@
   function pintar(ahora) {
     raf = requestAnimationFrame(pintar);
     const dt = ahora - ultimo;
-    if (dt < INTERVALO - 2) return;          // tope de 30 fps: no se dibuja entre medias
+    if (dt < INTERVALO - 2) return;  // máximo 30 fps
     ultimo = ahora;
     if (!video || video.readyState < 2) return;
     const [w, h] = NIVELES[nivel];
     ctx.drawImage(video, 0, 0, w, h);
-    ctx.globalCompositeOperation = 'color';  // tinte gris del humo: el video (violeta) queda gris
+    ctx.globalCompositeOperation = 'color';  // tinte gris
     ctx.fillStyle = tinte;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
-    // Degradacion: se mide el tiempo real entre cuadros dibujados.
+    // Mide el tiempo entre cuadros
     muestras.push(dt);
     if (muestras.length >= VENTANA) {
-      const medio = muestras.slice(5).reduce((a, b) => a + b, 0) / (muestras.length - 5);   // sin el arranque
+      const medio = muestras.slice(5).reduce((a, b) => a + b, 0) / (muestras.length - 5);
       bg.dataset.fps = String(Math.round(1000 / medio));
       muestras = [];
       if (medio > UMBRAL_MS) {

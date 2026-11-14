@@ -20,8 +20,7 @@ def proveedores():
 
 @router.get("/{proveedor}")
 def iniciar(proveedor: str, request: Request):
-    """Manda al usuario a Google o Facebook. El "estado" se guarda en una cookie para revisar al regreso
-    que la respuesta corresponde a quien empezó (evita que otra página inicie el acceso por él)."""
+    """Manda al usuario a Google o Facebook."""
     estado = secrets.token_urlsafe(24)
     respuesta = RedirectResponse(social.url_de_inicio(proveedor, estado, direccion_base(request)))
     respuesta.set_cookie(COOKIE_ESTADO, estado, max_age=600, httponly=True, samesite="lax")
@@ -34,7 +33,7 @@ def _volver_con_error(mensaje: str) -> RedirectResponse:
 
 @router.get("/{proveedor}/regreso")
 def regreso(proveedor: str, request: Request, code: str = "", state: str = "", error: str = ""):
-    """Aquí regresa el proveedor. Si todo salió bien, se vuelve al inicio con la sesión abierta."""
+    """Regreso del proveedor: abre la sesión y vuelve al inicio."""
     guardado = request.cookies.get(COOKIE_ESTADO, "")
     if error or not code:
         respuesta = _volver_con_error("Se canceló el acceso. Puedes intentarlo de nuevo.")
@@ -44,7 +43,7 @@ def regreso(proveedor: str, request: Request, code: str = "", state: str = "", e
         try:
             perfil = social.obtener_perfil(proveedor, code, direccion_base(request))
             sesion = social.entrar(perfil["email"], perfil["nombre"])
-            # El token va después del "#": esa parte no se manda a ningún servidor ni queda en los registros.
+            # El token va después del "#" para que no llegue a ningún servidor
             respuesta = RedirectResponse(f"/#sesion={sesion['token']}")
         except HTTPException as fallo:
             respuesta = _volver_con_error(str(fallo.detail))

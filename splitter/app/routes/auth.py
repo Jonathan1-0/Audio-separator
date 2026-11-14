@@ -42,14 +42,14 @@ class DatosRestablecer(BaseModel):
 
 @router.post("/recuperar")
 def recuperar(datos: DatosRecuperar, request: Request):
-    """Envía el enlace para cambiar la contraseña. Responde lo mismo exista o no la cuenta."""
+    """Envía el enlace para cambiar la contraseña."""
     recuperacion.pedir(datos.email, invitados.ip_de(request), direccion_base(request))
     return {"mensaje": "Si ese correo tiene cuenta, te enviamos un enlace para cambiar la contraseña."}
 
 
 @router.post("/restablecer")
 def restablecer(datos: DatosRestablecer):
-    """Guarda la contraseña nueva usando el código que venía en el enlace."""
+    """Guarda la contraseña nueva."""
     recuperacion.cambiar(datos.codigo, datos.password)
     return {"mensaje": "Tu contraseña se cambió. Ya puedes iniciar sesión."}
 

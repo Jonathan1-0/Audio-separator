@@ -1,7 +1,4 @@
-"""Cola de trabajos, con un hilo por GPU de Modal.
-
-En memoria quedan los trabajos activos y los de invitados; los de cuentas terminados viven en la base.
-"""
+"""Cola de trabajos, con un hilo por GPU."""
 from __future__ import annotations
 
 import logging
@@ -28,7 +25,7 @@ from .services.cuotas import minutos_guardado, plan_vigente
 log = logging.getLogger("splitter.jobs")
 
 QUEUED, PROCESSING, DONE, ERROR = "queued", "processing", "done", "error"
-# Fase de un trabajo en proceso: esperando a que Modal asigne una GPU, o ya separando.
+# Fases de un trabajo en proceso
 WAITING_GPU, SEPARATING = "waiting_gpu", "separating"
 ESTADOS_BD = {QUEUED: "en_cola", PROCESSING: "procesando", DONE: "completado", ERROR: "error"}
 ESTADOS_JOB = {v: k for k, v in ESTADOS_BD.items()}
@@ -38,7 +35,7 @@ MENSAJES = {QUEUED: "En cola", PROCESSING: "Separando audio…", DONE: "Listo", 
 @dataclass
 class Job:
     id: str
-    usuario_id: Optional[int]  # None = sin cuenta: el trabajo solo vive en memoria
+    usuario_id: Optional[int]  # None = sin cuenta
     original_name: str
     preset: str
     wanted_stems: List[str]
@@ -47,28 +44,28 @@ class Job:
     size_bytes: int = 0
     duration_seconds: Optional[float] = None
     status: str = QUEUED
-    progress: Optional[float] = 0.0  # 0..1, None si no se puede medir
+    progress: Optional[float] = 0.0  # 0 a 1
     message: str = "En cola"
     error: Optional[str] = None
-    phase: Optional[str] = None  # waiting_gpu | separating; None si no se está procesando
+    phase: Optional[str] = None
     stem_files: Dict[str, Path] = field(default_factory=dict)
     gpu_seconds: Optional[float] = None
     created_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
-    expires_at: Optional[float] = None  # cuándo se borran sus pistas; depende del plan
-    version: int = 0  # sube con cada cambio; el SSE lo usa para saber si hay novedades
+    expires_at: Optional[float] = None  # cuándo se borran sus pistas
+    version: int = 0  # sube con cada cambio
 
     def touch(self) -> None:
         self.version += 1
 
 
 def _segundos(fecha) -> Optional[float]:
-    """Fecha UTC de la base -> time.time()."""
+    """Fecha de la base a segundos."""
     return fecha.replace(tzinfo=timezone.utc).timestamp() if fecha else None
 
 
 def _job_desde_fila(fila: Trabajo) -> Optional[Job]:
-    """Arma un Job desde la base. Devuelve None si sus archivos ya expiraron."""
+    """Arma un Job desde la base. None si sus archivos ya expiraron."""
     status = ESTADOS_JOB[fila.estado]
     ahora = ahora_utc()
     vigentes = [r for r in fila.resultados if r.expira_en > ahora]
@@ -102,7 +99,7 @@ class JobManager:
     def __init__(self, engine) -> None:
         self.engine = engine
         self.jobs: Dict[str, Job] = {}
-        self._order: List[str] = []  # posición en la cola
+        self._order: List[str] = []
         self._queue: "queue.Queue[str]" = queue.Queue(maxsize=config.MAX_QUEUE)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -130,9 +127,9 @@ class JobManager:
         return job_id, d
 
     def submit(self, job: Job) -> None:
-        """Guarda el trabajo y lo pone en la cola. Lanza queue.Full si la cola está llena."""
+        """Guarda el trabajo y lo pone en la cola."""
         if job.usuario_id is None:
-            self._encolar(job)  # sin cuenta: no va a la base
+            self._encolar(job)  # sin cuenta no va a la base
             return
         with SessionLocal() as db:
             repo_trabajos.crear(
@@ -158,7 +155,7 @@ class JobManager:
             self._order.append(job.id)
 
     def get(self, job_id: str) -> Optional[Job]:
-        """Primero la memoria, luego la base."""
+        """Busca en memoria y luego en la base."""
         job = self.jobs.get(job_id)
         if job is not None:
             return job
@@ -173,13 +170,13 @@ class JobManager:
         return None
 
     def delete(self, job_id: str) -> bool:
-        """Borra los archivos. La fila se queda para el historial y las cuotas."""
+        """Borra los archivos; la fila se queda para el historial."""
         job = self.jobs.pop(job_id, None)
         activo = job is not None
         with self._lock:
             if job_id in self._order:
                 self._order.remove(job_id)
-        if job is not None and job.usuario_id is None:  # invitado: no tiene fila en la base
+        if job is not None and job.usuario_id is None:
             shutil.rmtree(config.DATA_DIR / job_id, ignore_errors=True)
             return True
         with SessionLocal() as db:
@@ -206,26 +203,25 @@ class JobManager:
 
     def _process(self, job: Job) -> None:
         job.status, job.message, job.progress = PROCESSING, MENSAJES[PROCESSING], 0.0
-        # Con Modal hay que esperar a que asigne una GPU; su primer avance avisa que ya empezó.
         if getattr(self.engine, "waits_for_gpu", False):
             job.phase, job.message = WAITING_GPU, "Esperando GPU…"
         else:
             job.phase = SEPARATING
         job.touch()
         self._guardar_estado(job)
-        guardado = 0  # último progreso guardado en la base, de 0 a 100
+        guardado = 0  # último progreso guardado, de 0 a 100
 
         def on_progress(fraction: float) -> None:
             nonlocal guardado
-            if job.phase == WAITING_GPU:  # llegó el primer avance: ya hay GPU
+            if job.phase == WAITING_GPU:  # ya hay GPU
                 job.phase, job.message = SEPARATING, "Separando audio…"
                 job.touch()
-            # Nunca baja, y se queda en 95 % hasta que termina de verdad.
+            # Se queda en 95 % hasta terminar
             new = min(0.95, max(job.progress or 0.0, fraction * 0.95))
             if new - (job.progress or 0.0) >= 0.01:
                 job.progress = new
                 job.touch()
-            # A la base solo cada 5 puntos, para no saturarla.
+            # Se guarda cada 5 puntos
             if int(new * 100) - guardado >= 5:
                 guardado = int(new * 100)
                 self._guardar_estado(job)
@@ -233,16 +229,15 @@ class JobManager:
         try:
             files = self.engine.separate(job.input_path, job.out_dir, job.preset, on_progress)
             job.gpu_seconds = gpu_seconds_del_hilo()
-            # Solo se guardan las pistas que pidió el usuario.
+            # Solo las pistas que pidió el usuario
             keep = {s: p for s, p in files.items() if s in job.wanted_stems}
             for s, p in files.items():
                 if s not in keep:
                     p.unlink(missing_ok=True)
             job.stem_files = keep
-            # Antes de marcarlo listo: el SSE manda el vencimiento en cuanto ve DONE.
             job.expires_at = self._vencimiento(job)
             job.status, job.progress, job.message = DONE, 1.0, MENSAJES[DONE]
-        except Exception as exc:  # noqa: BLE001 - el error se muestra en la página
+        except Exception as exc:
             if self.jobs.get(job.id) is not job:
                 log.info("Trabajo %s borrado mientras se procesaba", job.id)
             else:
@@ -255,15 +250,14 @@ class JobManager:
             job.input_path.unlink(missing_ok=True)
             job.touch()
             if self.jobs.get(job.id) is job:
-                # El de invitado se queda en memoria hasta que expire (ver _clean_loop).
                 if job.usuario_id is not None and self._guardar_final(job):
                     self.jobs.pop(job.id, None)
             else:
-                # Se borró mientras se procesaba: el motor volvió a crear la carpeta al escribir.
+                # Se borró mientras se procesaba
                 shutil.rmtree(config.DATA_DIR / job.id, ignore_errors=True)
 
     def _guardar_estado(self, job: Job) -> None:
-        """Si la base falla, el trabajo sigue igual."""
+        """Guarda el avance. Si la base falla, el trabajo sigue."""
         if job.usuario_id is None:
             return
         try:
@@ -273,7 +267,7 @@ class JobManager:
             log.exception("No se pudo guardar el progreso de %s", job.id)
 
     def _vencimiento(self, job: Job) -> float:
-        """Cuándo se borran sus pistas. El plan que tiene al terminar decide: gratis 1 h, pro una semana."""
+        """Cuándo se borran sus pistas, según el plan."""
         minutos = config.JOB_TTL_MINUTES
         if job.usuario_id is not None:
             try:
@@ -284,7 +278,7 @@ class JobManager:
         return time.time() + minutos * 60
 
     def _guardar_final(self, job: Job) -> bool:
-        """Si la base falla, el trabajo sigue en memoria."""
+        """Guarda el estado final en la base."""
         ahora = ahora_utc()
         try:
             with SessionLocal() as db:
@@ -310,7 +304,7 @@ class JobManager:
             return False
 
     def _restaurar(self) -> None:
-        """Al arrancar, lo que quedó sin terminar vuelve a la cola si todavía tiene su audio."""
+        """Al arrancar, lo pendiente vuelve a la cola."""
         with SessionLocal() as db:
             pendientes = repo_trabajos.listar_pendientes(db)
             requeued = 0
@@ -342,23 +336,21 @@ class JobManager:
     def _clean_loop(self) -> None:
         while not self._stop.wait(60):
             cutoff = time.time() - config.JOB_TTL_MINUTES * 60
-            # Los de invitado salen de la memoria al expirar; su carpeta se borra abajo.
             for job_id, job in list(self.jobs.items()):
                 if job.usuario_id is None and job.finished_at and job.finished_at < cutoff:
                     self.jobs.pop(job_id, None)
             for d in config.DATA_DIR.iterdir():
-                # La carpeta cambió por última vez al borrar el audio original, cuando terminó.
                 if d.is_dir() and re.fullmatch(r"[0-9a-f]{32}", d.name) and d.name not in self.jobs:
                     if d.stat().st_mtime < cutoff and not self._sigue_vigente(d.name):
                         log.info("Borrando archivos expirados de %s", d.name)
                         shutil.rmtree(d, ignore_errors=True)
 
     def _sigue_vigente(self, job_id: str) -> bool:
-        """Un trabajo con cuenta se guarda hasta su expira_en (una semana en pro)."""
+        """Los trabajos con cuenta se guardan hasta su fecha de vencimiento."""
         try:
             with SessionLocal() as db:
                 fila = repo_trabajos.obtener(db, job_id)
                 return fila is not None and any(r.expira_en > ahora_utc() for r in fila.resultados)
         except SQLAlchemyError:
             log.exception("No se pudo revisar si %s sigue vigente", job_id)
-            return True  # ante la duda no se borra; se revisa en la siguiente vuelta
+            return True  # ante la duda no se borra

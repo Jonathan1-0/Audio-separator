@@ -1,15 +1,9 @@
-// Humo de cigarro de fondo y el UNICO requestAnimationFrame de la pagina (SplitterLoop).
-//  - Canvas WebGL a baja resolucion (1/SCALE), escalado por CSS. Un shader con ruido de dominio deformado
-//    dibuja hilos finos que suben y se retuercen sin parar; no hay particulas ni trabajo por pixel en CPU.
-//  - El humo se dibuja en un Worker (OffscreenCanvas): compilar el shader y las esperas de la GPU no
-//    bloquean la pagina. Sin soporte, se dibuja aqui mismo dentro de SplitterLoop.
-//  - El canvas es fijo y queda fuera del snapshot de liquidGL, asi que el vidrio no lo toca.
+// Humo de fondo (WebGL) y el único bucle de animación de la página.
 (() => {
   'use strict';
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-  // ---- Bucle unico: wave.js y el humo se suscriben aqui; nadie mas pide su propio frame ----
-  // Cada suscriptor puede pedir un tope de fps: el bucle le llama solo cuando toca, con el dt acumulado.
+  // ---- Bucle único: wave.js y el humo se suscriben aquí ----
   const subscribers = [];
   let frame = 0;
   let last = null;
@@ -37,7 +31,7 @@
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) halt(); else run(); });
   window.SplitterLoop = {
-    // fps = 0: cada frame. Sin suscriptores el bucle se detiene del todo (ni un requestAnimationFrame vacio).
+    // Sin suscriptores el bucle se detiene
     add(fn, fps = 0) {
       if (subscribers.some((sub) => sub.fn === fn)) return;
       subscribers.push({ fn, every: fps ? 1000 / fps : 0, acc: 0 });
@@ -53,18 +47,18 @@
   const canvas = document.getElementById('smoke-canvas');
   if (!canvas) return;
 
-  const SCALE = 8;            // resolucion interna = 1/8 de la pantalla: el humo es difuso y no pierde detalle
-  const FRAME_MS = 1000 / 30; // la deriva es lenta: 30 fps se ve igual y deja la GPU libre para el vidrio
-  const FAR_MS = 1000 / 12;   // con el hero fuera de pantalla (formulario, vidrio): el humo es un velo muy tenue, 12 fps bastan y la GPU queda libre
-  const SPEED = 1;            // multiplicador de la deriva
-  const START = 40;           // arranca ya avanzado, para que la primera vista (y el modo sin movimiento) no salga vacia
+  const SCALE = 8;  // resolución interna: 1/8 de la pantalla
+  const FRAME_MS = 1000 / 30;  // 30 fps
+  const FAR_MS = 1000 / 12;  // 12 fps con la portada fuera de pantalla
+  const SPEED = 1;  // velocidad
+  const START = 40;  // arranca ya avanzado
 
   const style = getComputedStyle(document.documentElement);
-  // Carbon -> gris humo -> plata -> perla -> blanco frio: de la sombra a la zona iluminada.
+  // Colores, de la sombra a la luz
   const ramp = ['shadow', 'grey', 'silver', 'pearl', 'white']
     .flatMap((name) => style.getPropertyValue(`--smoke-${name}`).trim().split(/\s+/).map((v) => Number(v) / 255));
   const strength = parseFloat(style.getPropertyValue('--smoke-alpha')) || 0.4;
-  const ceiling = parseFloat(style.getPropertyValue('--smoke-ceiling')) || 0.23; // tope de opacidad: mantiene el contraste AA del texto
+  const ceiling = parseFloat(style.getPropertyValue('--smoke-ceiling')) || 0.23;  // opacidad máxima
 
   const VERTEX = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
   const FRAGMENT = `
@@ -93,36 +87,30 @@ float fbm(vec2 p){
 
 void main(){
   vec2 uv = gl_FragCoord.xy / res.y;
-  // Niebla que sube despacio: el campo baja y se deforma dos veces, de ahi salen los pliegues del humo.
   vec2 p = uv * vec2(1.15, 0.95);
   p.y -= t * 0.04;
   p.x += 0.1 * sin(t * 0.06 + uv.y * 1.2);
   vec2 q = vec2(fbm(p + vec2(0., t * 0.03)), fbm(p + vec2(5.2, 1.3) - t * 0.025));
   vec2 r = vec2(fbm(p + 3. * q + vec2(1.7, 9.2) + t * 0.035), fbm(p + 3. * q + vec2(8.3, 2.8) - t * 0.03));
   float f = fbm(p + 3. * r);
-  float fold = pow(1. - abs(2. * f - 1.), 2.6);          // pliegues suaves, sin hilos duros
-  float haze = smoothstep(.3, .8, fbm(p * .7 + r));      // velo difuso de fondo
-  float body = smoothstep(.15, .7, fbm(p * .4 + vec2(3.1, t * -.02)));  // zonas con y sin humo
+  float fold = pow(1. - abs(2. * f - 1.), 2.6);
+  float haze = smoothstep(.3, .8, fbm(p * .7 + r));
+  float body = smoothstep(.15, .7, fbm(p * .4 + vec2(3.1, t * -.02)));
   float v = (fold * .55 + haze * .5) * body;
-  // Se apaga hacia los bordes para que no haya cortes duros.
   vec2 s = gl_FragCoord.xy / res;
   v *= smoothstep(0., .18, s.x) * smoothstep(0., .18, 1. - s.x) * smoothstep(0., .1, 1. - s.y);
   float l = clamp(v, 0., 1.);
-  // La luz fria solo llega a las crestas: plata y perla en la zona media, blanco apenas en los reflejos.
   vec3 c = mix(ramp[0], ramp[1], smoothstep(0., .15, l));
   c = mix(c, ramp[2], smoothstep(.2, .45, l));
   c = mix(c, ramp[3], smoothstep(.4, .7, l));
   c = mix(c, ramp[4], smoothstep(.8, 1., l));
-  // Curva suave contra el tope: el humo gana presencia en la zona media sin pasar nunca del tope.
   float a = ceiling * (1. - exp(-pow(l, .7) * strength / ceiling));
   gl_FragColor = vec4(c * a, a);
 }`;
 
   const config = { vertex: VERTEX, fragment: FRAGMENT, ramp, strength, ceiling, frameMs: FRAME_MS, speed: SPEED, start: START };
 
-  // ---- Motor de dibujo. Autocontenido: se serializa tal cual para el Worker ----
-  // Compilacion sin bloquear: con KHR_parallel_shader_compile el shader se compila en segundo plano y
-  // draw() devuelve false hasta que esta listo; preguntar antes por LINK_STATUS congelaria el hilo.
+  // ---- Motor de dibujo (también corre en el Worker) ----
   function createSmoke(target, cfg) {
     const gl = target.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
     if (!gl) return null;
@@ -183,13 +171,12 @@ void main(){
     };
   }
 
-  // ---- Reloj del humo: avanza solo mientras corre, dibuja cada FRAME_MS y reintenta si el shader no esta listo ----
+  // ---- Reloj del humo ----
   function createClock(smoke, cfg) {
     let elapsed = cfg.start;
     let sinceDraw = cfg.frameMs;
     let stillTimer = 0;
     const clock = {
-      // Devuelve false si el shader fallo y no tiene sentido seguir.
       step(dt) {
         elapsed += dt * cfg.speed;
         sinceDraw += dt * 1000;
@@ -197,7 +184,7 @@ void main(){
         if (smoke.draw(elapsed)) sinceDraw = 0;
         return !smoke.failed;
       },
-      // Modo sin movimiento: un solo cuadro, en cuanto el shader termine de compilar.
+      // Sin movimiento: un solo cuadro
       still() {
         clearTimeout(stillTimer);
         if (!smoke.draw(elapsed) && !smoke.failed) stillTimer = setTimeout(clock.still, 50);
@@ -208,7 +195,7 @@ void main(){
     return clock;
   }
 
-  // ---- Worker: su propio requestAnimationFrame, fuera del hilo de la pagina ----
+  // ---- Worker ----
   function smokeWorker(createSmoke, createClock) {
     let smoke = null;
     let clock = null;
@@ -246,7 +233,7 @@ void main(){
     };
   }
 
-  // Tamano interno del canvas. ResizeObserver no fuerza layout; tras el primer tamano, se espera a que el resize se asiente.
+  // Tamaño interno del canvas
   function watchSize(apply) {
     let timer = 0;
     let first = true;
@@ -258,7 +245,7 @@ void main(){
     }).observe(canvas);
   }
 
-  // Ritmo segun lo que se ve: a pleno ritmo solo mientras el hero esta en pantalla.
+  // A pleno ritmo solo con la portada en pantalla
   function watchHero(apply) {
     const hero = document.querySelector('.intro');
     if (!hero || !('IntersectionObserver' in window)) return;
@@ -293,7 +280,6 @@ void main(){
     const smoke = createSmoke(canvas, config);
     if (!smoke) return;
     const clock = createClock(smoke, config);
-    // Sin la extension, el enlace bloquea: solo se permite cuando la pagina ya se pinto y el navegador esta libre.
     let allowed = smoke.hasParallelCompile;
     const step = (dt) => { if (allowed && !clock.step(dt)) window.SplitterLoop.remove(step); };
     function sync() {

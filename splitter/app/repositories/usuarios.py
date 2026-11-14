@@ -17,15 +17,13 @@ def buscar_por_id(db: Session, usuario_id: int) -> Optional[Usuario]:
 
 
 def crear(db: Session, email: str, nombre: str, password_hash: str) -> Usuario:
-    """Quien llama hace el commit."""
     usuario = Usuario(email=email, nombre=nombre, password_hash=password_hash)
     db.add(usuario)
-    db.flush()  # para que ya tenga id
+    db.flush()
     return usuario
 
 
 def crear_sesion(db: Session, usuario_id: int, token: str, expira_en: datetime) -> Sesion:
-    """Quien llama hace el commit."""
     sesion = Sesion(usuario_id=usuario_id, token=token, expira_en=expira_en)
     db.add(sesion)
     return sesion
@@ -44,11 +42,10 @@ def borrar_sesiones_vencidas(db: Session, usuario_id: int, ahora: datetime) -> N
 
 
 def cambiar_password(db: Session, usuario: Usuario, password_hash: str) -> None:
-    """Quien llama hace el commit."""
     usuario.password_hash = password_hash
     db.add(usuario)
 
 
 def borrar_sesiones_de(db: Session, usuario_id: int) -> None:
-    """Cierra la sesión en todos los dispositivos (se usa al cambiar la contraseña)."""
+    """Cierra todas las sesiones del usuario."""
     db.execute(delete(Sesion).where(Sesion.usuario_id == usuario_id))

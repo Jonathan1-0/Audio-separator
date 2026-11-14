@@ -1,4 +1,4 @@
-"""Pruebas del flujo completo de separación con el motor simulado: subir, esperar, escuchar y descargar."""
+"""Pruebas de la separación con el motor simulado."""
 import time
 
 
@@ -7,7 +7,7 @@ def _crear_trabajo(cliente, audio_wav, nombre="cancion.wav", preset="2stem"):
 
 
 def _esperar(cliente, job_id, segundos=60):
-    """Pregunta el estado hasta que el trabajo termina (bien o con error)."""
+    """Espera a que el trabajo termine."""
     limite = time.time() + segundos
     while time.time() < limite:
         datos = cliente.get(f"/api/jobs/{job_id}").json()
@@ -33,20 +33,20 @@ def test_separacion_completa_dos_pistas(cliente, audio_wav):
 
     final = _esperar(cliente, job_id)
     assert final["status"] == "done"
-    assert final["progress"] == 1  # el avance va de 0 a 1
+    assert final["progress"] == 1
     nombres = [pista["name"] for pista in final["stems"]]
     assert nombres == ["vocals", "instrumental"]
 
-    # Vista previa y descarga en otro formato.
+    # Vista previa y descarga
     assert cliente.get(f"/api/jobs/{job_id}/stems/vocals/preview").status_code == 200
     descarga = cliente.get(f"/api/jobs/{job_id}/stems/vocals/download", params={"format": "mp3"})
     assert descarga.status_code == 200
     assert len(descarga.content) > 0
 
-    # Formato que no existe.
+    # Formato que no existe
     assert cliente.get(f"/api/jobs/{job_id}/stems/vocals/download", params={"format": "xyz"}).status_code == 400
 
-    # Al borrarlo deja de existir.
+    # Al borrarlo deja de existir
     assert cliente.delete(f"/api/jobs/{job_id}").status_code == 204
     assert cliente.get(f"/api/jobs/{job_id}").status_code == 404
 

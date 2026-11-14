@@ -1,4 +1,4 @@
-"""Visor local de solo lectura de la base. Uso: python ver_base.py y abrir http://127.0.0.1:8770/"""
+"""Visor de la base. Uso: python ver_base.py y abrir http://127.0.0.1:8770/"""
 import html
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -81,13 +81,12 @@ def _pagina() -> str:
 
 class Visor(BaseHTTPRequestHandler):
     def log_message(self, *args) -> None:
-        """No escribe cada petición en la terminal."""
+        pass  # no escribe cada petición en la terminal
 
     def do_GET(self) -> None:
-        """Un error solo muestra su tipo, nunca los datos de conexión."""
         try:
             cuerpo, codigo = _pagina(), 200
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             cuerpo, codigo = f"<h1>No se pudo leer la base</h1><p>{type(exc).__name__}</p>", 500
         pagina = f'<!doctype html><meta charset="utf-8"><title>Base Splitter</title><style>{ESTILO}</style>{cuerpo}'
         datos = pagina.encode()

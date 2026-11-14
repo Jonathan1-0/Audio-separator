@@ -1,16 +1,15 @@
-"""Límites de quien usa Splitter sin cuenta: se cuentan por IP, parecidos al plan gratis."""
+"""Límites de quien usa Splitter sin cuenta, por IP."""
 from fastapi import HTTPException, Request
 
 from .. import config
 from ..ratelimit import RateLimiter
 
-# La cuenta se guarda en disco para que reiniciar el servidor no la borre.
 _por_ip = RateLimiter(config.INVITADO_TRABAJOS_POR_DIA, 24 * 3600, config.DATA_DIR / "limite_invitados.json")
 
 
 def ip_de(request: Request) -> str:
     if config.BEHIND_PROXY:
-        # El proxy agrega la IP real al final; lo anterior lo puede escribir el usuario.
+        # El proxy pone la IP real al final
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded.strip(" ,"):
             return forwarded.rstrip(" ,").rsplit(",", 1)[-1].strip()
@@ -18,13 +17,13 @@ def ip_de(request: Request) -> str:
 
 
 def verificar_preset(preset: str) -> None:
-    """Sin cuenta se tiene lo del plan gratis: sin la mejor calidad."""
+    """Sin cuenta no hay mejor calidad."""
     if config.PRESETS.get(preset, {}).get("mejor_calidad"):
         raise HTTPException(403, "La mejor calidad de separación es del plan Pro. Usa la calidad rápida o inicia sesión.")
 
 
 def reservar(ip: str) -> None:
-    """Aparta un trabajo del día para esa IP, o da 429."""
+    """Aparta un trabajo del día para esa IP."""
     wait = _por_ip.acquire(ip)
     if wait:
         horas = max(1, round(wait / 3600))

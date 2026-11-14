@@ -1,9 +1,5 @@
-"""Lo que corre en la GPU de Modal. Cada GPU es una app aparte:
-
+"""Lo que corre en la GPU de Modal. Para subirlo:
     SPLITTER_GPU=L4 modal deploy modal_app.py   # splitter-gpu-l4
-    SPLITTER_GPU=T4 modal deploy modal_app.py   # splitter-gpu-t4
-
-Hay que volver a desplegar cada vez que cambie este archivo o app/.
 """
 from __future__ import annotations
 
@@ -17,17 +13,17 @@ if GPU not in SUPPORTED_GPUS:
     raise ValueError(f"SPLITTER_GPU debe ser uno de {SUPPORTED_GPUS}, no {GPU!r}")
 
 APP_NAME = f"splitter-gpu-{GPU.lower()}"
-# Si Modal no tiene L4 libre, usa una T4 en vez de dejar el trabajo esperando.
+# Si no hay L4 libre, usa una T4
 GPU_OPTIONS = ["L4", "T4"] if GPU == "L4" else [GPU]
-# GPUs encendidas a la vez como máximo. Debe coincidir con SPLITTER_PARALLEL_JOBS.
+# GPUs a la vez. Igual que SPLITTER_PARALLEL_JOBS
 MAX_CONTAINERS = int(os.environ.get("SPLITTER_MAX_CONTAINERS", "3"))
 MODEL_DIR = "/models"
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("ffmpeg")
-    .pip_install("audio-separator[gpu]==0.47.0", "audioread")  # librosa 1.0 ya no instala audioread
-    # El contenedor vuelve a importar este archivo: necesita las mismas variables que al desplegar.
+    .pip_install("audio-separator[gpu]==0.47.0", "audioread")
+    # El contenedor necesita las mismas variables que al desplegar
     .env({
         "SPLITTER_MODEL_DIR": MODEL_DIR,
         "SPLITTER_DATA_DIR": "/tmp/splitter",
@@ -48,7 +44,7 @@ app = modal.App(APP_NAME, image=image)
     volumes={MODEL_DIR: models},
     timeout=20 * 60,
     max_containers=MAX_CONTAINERS,
-    # Se apaga a los 2 min sin trabajo. La espera se cobra; volver a encender tarda ~15-25 s.
+    # Se apaga a los 2 minutos sin trabajo
     scaledown_window=2 * 60,
 )
 class Separator:
@@ -64,8 +60,7 @@ class Separator:
 
     @modal.method()
     def separate(self, audio: bytes, filename: str, preset: str, progress_queue_id: str) -> dict:
-        """Manda el avance a la cola como {"value": 0..1} y devuelve {"stems": {nombre: FLAC}, "stats"}.
-        El primer 0.0 le avisa al backend que ya hay GPU. No es generador para poder cancelarla."""
+        """Separa el audio y manda el avance a la cola."""
         import shutil
         import subprocess
         import tempfile
@@ -79,7 +74,7 @@ class Separator:
 
         def report(fraction: float) -> None:
             nonlocal last
-            if fraction - last >= 0.01:  # la cola es remota: no se manda cada paso
+            if fraction - last >= 0.01:
                 last = fraction
                 progress.put({"value": fraction})
 
@@ -90,7 +85,7 @@ class Separator:
             files_before = set(os.listdir(MODEL_DIR)) if os.path.isdir(MODEL_DIR) else set()
             files = self.engine.separate(src, work / "out", preset, report)
             if set(os.listdir(MODEL_DIR)) != files_before:
-                models.commit()  # guarda el modelo recién descargado para los próximos contenedores
+                models.commit()  # guarda el modelo descargado
 
             stems = {}
             for stem, wav in files.items():
@@ -103,12 +98,12 @@ class Separator:
 
             timings = self.engine.last_timings
             stats = {
-                "gpu": self.engine.device_info().get("device", GPU),  # la que tocó, puede ser la de respaldo
+                "gpu": self.engine.device_info().get("device", GPU),
                 "gpu_seconds": time.perf_counter() - started,
                 "load_seconds": timings["load_seconds"],
                 "separate_seconds": timings["separate_seconds"],
             }
             return {"stems": stems, "stats": stats}
         finally:
-            # El contenedor atiende varios trabajos seguidos: que no se acumulen en /tmp.
+            # Limpia los temporales del trabajo
             shutil.rmtree(work, ignore_errors=True)

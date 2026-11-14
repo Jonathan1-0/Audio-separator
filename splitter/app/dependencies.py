@@ -1,4 +1,4 @@
-"""Dependencias de FastAPI para saber quién hace la petición."""
+"""Quién hace la petición."""
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -22,12 +22,12 @@ def usuario_actual(token: str = Depends(token_actual)) -> Usuario:
 
 
 def usuario_opcional(credenciales: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)) -> Optional[Usuario]:
-    """Sin token devuelve None; con un token vencido da 401 igual."""
+    """Usuario del token, o None si no hay token."""
     if credenciales is None:
         return None
     return auth.usuario_por_token(credenciales.credentials)
 
 
 def direccion_base(request: Request) -> str:
-    """Dirección de la página, sin diagonal al final: la de .env o, si no hay, la de la petición."""
+    """Dirección de la página: la de .env o la de la petición."""
     return config.PUBLIC_URL or str(request.base_url).rstrip("/")

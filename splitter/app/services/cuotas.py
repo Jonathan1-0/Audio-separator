@@ -12,7 +12,7 @@ from ..repositories import trabajos as repo_trabajos
 
 
 def crear_periodo_gratis(db: Session, usuario_id: int, plan_nombre: str = "gratis") -> Suscripcion:
-    """Periodo nuevo del plan gratis (o admin, que se renueva solo); quien llama hace el commit."""
+    """Crea un periodo nuevo del plan gratis."""
     plan = repo_suscripciones.buscar_plan(db, plan_nombre)
     inicio = ahora_utc()
     fin = inicio + timedelta(days=config.DIAS_PERIODO)
@@ -20,7 +20,7 @@ def crear_periodo_gratis(db: Session, usuario_id: int, plan_nombre: str = "grati
 
 
 def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
-    """Si la activa ya venció, el usuario pasa a un periodo gratis nuevo."""
+    """Suscripción vigente; si ya venció, pasa a gratis."""
     suscripcion = repo_suscripciones.buscar_activa(db, usuario_id)
     if suscripcion is not None and suscripcion.fin_periodo > ahora_utc():
         return suscripcion
@@ -39,7 +39,7 @@ def plan_vigente(db: Session, usuario_id: int) -> str:
 
 
 def minutos_guardado(plan: str) -> int:
-    """Cuánto se guardan las pistas de un trabajo de ese plan."""
+    """Minutos que se guardan las pistas en ese plan."""
     return config.MINUTOS_GUARDADO_PLAN.get(plan, config.JOB_TTL_MINUTES)
 
 
@@ -61,7 +61,7 @@ def es_mejor_calidad(preset: str) -> bool:
 
 
 def verificar_cantidad(usuario_id: int, preset: str) -> None:
-    """Antes de subir el archivo: que le queden trabajos y que su plan incluya esa calidad."""
+    """Antes de subir: que le queden trabajos y tenga esa calidad."""
     with SessionLocal() as db:
         suscripcion = suscripcion_vigente(db, usuario_id)
         if es_mejor_calidad(preset) and not suscripcion.plan.mejor_calidad:
@@ -70,7 +70,7 @@ def verificar_cantidad(usuario_id: int, preset: str) -> None:
 
 
 def verificar_audio(usuario_id: int, segundos: float) -> None:
-    """Con el audio ya subido: duración, y otra vez la cantidad por si hubo subidas a la vez."""
+    """Con el audio subido: revisa la duración."""
     with SessionLocal() as db:
         suscripcion = suscripcion_vigente(db, usuario_id)
         _revisar_cantidad(db, suscripcion)

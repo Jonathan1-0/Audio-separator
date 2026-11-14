@@ -1,5 +1,4 @@
-// Formulario de Splitter conectado al backend (FastAPI, /api/...).
-// Tres vistas en el mismo bloque: formulario, proceso (progreso real) y resultados (reproductor multipista + descargas).
+// Formulario, progreso y resultados de Splitter.
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -8,16 +7,16 @@
   const dropzone = $('dropzone');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-  // Etiquetas en espanol; los ids viajan en ingles al backend.
+  // Nombres de las pistas en español
   const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', other: 'Otros instrumentos', voice: 'Voz' };
   const stemLabel = (id) => STEM_LABELS[id] || id;
-  // Pistas elegibles por modo (clean tiene una sola pista: no hay nada que elegir).
+  // Pistas que se pueden elegir en cada modo
   const trackDefinitions = {
     vocals: ['vocals', 'instrumental'],
     instruments: ['vocals', 'drums', 'bass', 'other'],
   };
   const selectedTracks = Object.fromEntries(Object.entries(trackDefinitions).map(([key, ids]) => [key, new Set(ids)]));
-  // El backend no conoce los modos de la pagina: se traducen a presets.
+  // Cada modo de la página es un preset del servidor
   function presetFor(mode) {
     if (mode === 'vocals') return '2stem';
     if (mode === 'instruments') return form.elements.quality.value === 'best' ? '4stem' : '4stem_fast';
@@ -34,8 +33,7 @@
   let fileRevision = 0;
   let dragDepth = 0;
 
-  // ---------- Cuenta (account.js) ----------
-  // Con sesion se usan los limites del plan (GET /suscripcion); sin ella, los de invitado de /api/config.
+  // ---------- Cuenta ----------
   const sesion = () => window.getSesion?.() || null;
   const cuenta = () => sesion()?.cuenta || null;
   const auth = () => window.authHeaders?.() || {};
@@ -99,7 +97,6 @@
       : 'Todo listo. Tu audio está preparado.';
   }
 
-  // Las pastillas se montan una sola vez; al cambiar de modo solo se muestran u ocultan y se restaura su estado.
   const allTracks = [];
   for (const ids of Object.values(trackDefinitions)) for (const id of ids) if (!allTracks.includes(id)) allTracks.push(id);
   const trackChips = new Map();
@@ -132,7 +129,7 @@
     }
   }
 
-  // "Mejor calidad" es del plan Pro (el servidor tambien lo revisa).
+  // "Mejor calidad" es del plan Pro
   const bestInput = form.querySelector('input[name="quality"][value="best"]');
   const bestNote = bestInput.closest('label').querySelector('small');
   const bestText = bestNote.textContent;
@@ -214,7 +211,6 @@
     const duration = await readDuration(file);
     if (revision !== fileRevision) return;
     validating = false;
-    // El limite depende del plan (o de invitado); el servidor lo vuelve a comprobar.
     const limit = maxMinutes();
     if (duration !== null && duration > limit * 60) {
       const upsell = cuenta() && !hasHistory() ? ' Con el plan Pro puedes subir audios más largos.' : '';
@@ -243,7 +239,7 @@
     if (event.dataTransfer.files.length !== 1) { showError('Añade un solo archivo de audio a la vez.'); return; }
     selectFile(event.dataTransfer.files[0]);
   });
-  // Evita que el navegador abra el archivo si se suelta fuera de la zona.
+  // Que el navegador no abra el archivo si se suelta fuera
   for (const eventName of ['dragover', 'drop']) {
     window.addEventListener(eventName, (event) => {
       if (Array.from(event.dataTransfer?.types || []).includes('Files')) event.preventDefault();
@@ -279,7 +275,7 @@
 
   // ---------- Crear el trabajo ----------
   function upload(data, onProgress) {
-    // XMLHttpRequest y no fetch: fetch no informa del avance de la subida.
+    // XMLHttpRequest para poder ver el avance de la subida
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/jobs');
@@ -289,7 +285,7 @@
         let body = null;
         try { body = JSON.parse(xhr.responseText); } catch { /* sin cuerpo JSON */ }
         if (xhr.status >= 200 && xhr.status < 300 && body) { resolve(body); return; }
-        if (xhr.status === 401) window.setSesion?.(null);   // la sesion vencio: se vuelve a pedir cuenta
+        if (xhr.status === 401) window.setSesion?.(null);  // la sesión venció
         if (body && typeof body.detail === 'string') { reject(new Error(body.detail)); return; }
         const fallback = new Response(null, { status: xhr.status });
         errorDetail(fallback).then((message) => reject(new Error(message)));
@@ -301,8 +297,8 @@
     });
   }
 
-  let currentJob = null;   // ultimo trabajo creado en el servidor (para borrarlo)
-  let events = null;       // EventSource
+  let currentJob = null;  // último trabajo creado
+  let events = null;
   let pollTimer = 0;
   let pollId = '';
   let cancelled = false;
@@ -317,7 +313,7 @@
 
   function discardJob() {
     stopFollowing();
-    // Con el plan Pro el trabajo se queda en "Mis audios"; sin el, se borra al pasar a otro o al salir.
+    // Con Pro el trabajo se queda en "Mis audios"; si no, se borra
     if (currentJob && !hasHistory()) fetch(`/api/jobs/${currentJob.id}`, { method: 'DELETE', keepalive: true, headers: auth() }).catch(() => {});
     currentJob = null;
   }
@@ -349,7 +345,6 @@
       setJobText('Esperando turno…', position > 0 ? `Posición en la cola: ${position}.` : 'Eres el siguiente.');
       return;
     }
-    // processing
     const progress = typeof job.progress === 'number' ? job.progress : null;
     setBar(progress);
     const message = job.message || `${actionName()}…`;
@@ -378,7 +373,7 @@
   }
 
   function poll(id) {
-    // Respaldo cuando el SSE falla.
+    // Respaldo si el SSE falla
     async function tick() {
       if (pollId !== id) return;
       try {
@@ -399,7 +394,6 @@
     events.addEventListener('update', (event) => { try { handleUpdate(JSON.parse(event.data)); } catch { /* dato ilegible */ } });
     events.addEventListener('gone', () => failJob('Este trabajo ya no está disponible. Vuelve a subir el archivo.'));
     events.onerror = () => {
-      // Si el flujo se cierra, se sigue por polling.
       if (events && events.readyState === EventSource.CLOSED) { events = null; poll(id); }
     };
   }
@@ -415,7 +409,6 @@
     const data = new FormData();
     data.append('file', audioFile);
     data.append('preset', presetFor(mode));
-    // Solo las pistas elegibles viajan; las modos de una sola pista (clean) mandan vacio = todas.
     data.append('stems', mode in selectedTracks ? [...selectedTracks[mode]].join(',') : '');
     $('job-file').textContent = audioFile.name;
     $('job-title').textContent = 'Subiendo tu audio';
@@ -435,7 +428,7 @@
       return;
     }
     if (cancelled) { fetch(`/api/jobs/${job.id}`, { method: 'DELETE', headers: auth() }).catch(() => {}); return; }
-    window.refrescarCuenta?.();   // el trabajo ya cuenta en el consumo del periodo
+    window.refrescarCuenta?.();
     currentJob = job;
     handleUpdate(job);
     if (currentJob) follow(job.id);
@@ -444,7 +437,6 @@
   $('job-cancel').addEventListener('click', () => {
     cancelled = true;
     upload.xhr?.abort();
-    // Cancelar si borra el trabajo, tambien en Pro (el servidor lo marca como cancelado).
     stopFollowing();
     if (currentJob) fetch(`/api/jobs/${currentJob.id}`, { method: 'DELETE', headers: auth() }).catch(() => {});
     currentJob = null;
@@ -454,7 +446,7 @@
   });
 
   // ---------- Reproductor multipista ----------
-  // Cada pista es su propio <audio> y suenan todas a la vez. El volumen va por Web Audio porque en iPhone `audio.volume` no se puede cambiar.
+  // Cada pista es un <audio> y suenan todas a la vez
   const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
   const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>';
   let actx = null;
@@ -474,7 +466,7 @@
   }
 
   function connectAudio() {
-    // Se crea en el primer play: los navegadores no dejan sonar nada antes de un clic.
+    // Se crea en el primer play
     const Context = window.AudioContext || window.webkitAudioContext;
     if (!Context) return;
     if (!actx) actx = new Context();
@@ -504,7 +496,6 @@
       await Promise.all(tracks.map((track) => track.audio.play()));
       $('player-status').textContent = '';
     } catch (error) {
-      // AbortError: se pauso antes de arrancar (el usuario, o mientras otra pista carga).
       if (error && error.name === 'AbortError') return;
       pauseAll();
       $('player-status').textContent = 'No se pudo reproducir. Intenta de nuevo.';
@@ -521,7 +512,7 @@
   function seekAll(seconds) { for (const track of tracks) track.audio.currentTime = seconds; showTime(seconds); }
 
   function sync() {
-    // Cada pista lleva su propio reloj: la que se desfasa se alinea con la primera.
+    // La pista que se desfasa se alinea con la primera
     if (!tracks.length) return;
     const lead = tracks[0].audio;
     for (const track of tracks.slice(1)) {
@@ -565,7 +556,7 @@
       updateReset();
     });
     button.addEventListener('click', () => prepareDownload(button, stem.download_url));
-    // Si una pista se queda cargando, las demas la esperan; al volver se igualan a su tiempo.
+    // Si una pista se queda cargando, las demás la esperan
     audio.addEventListener('waiting', () => { if (playing) for (const other of tracks) if (other !== track) other.audio.pause(); });
     audio.addEventListener('playing', () => {
       if (!playing) return;
@@ -578,7 +569,7 @@
     return track;
   }
 
-  // "Restablecer mezcla": regresa todos los volumenes al 100 %. Solo se activa si alguno cambio.
+  // Regresa todos los volúmenes al 100 %
   function updateReset() { $('reset-mix').disabled = tracks.every((track) => track.volume === 1); }
   function resetMix() {
     for (const track of tracks) {
@@ -600,7 +591,7 @@
   }
 
   function clearTracks() {
-    // Un audio que ya no se ve sigue sonando si no se detiene y se le quita la fuente.
+    // Detiene el audio y le quita la fuente
     setPlaying(false);
     for (const track of tracks) {
       track.audio.pause();
@@ -635,7 +626,7 @@
     mine[0]?.audio.addEventListener('ended', () => { pauseAll(); seekAll(0); });
     $('player-status').textContent = 'Cargando pistas…';
     Promise.all(mine.map((track) => metadataReady(track.audio))).then(() => {
-      if (tracks !== mine) return;   // ya se paso a otro audio
+      if (tracks !== mine) return;  // ya se pasó a otro audio
       const total = Math.max(...mine.map((track) => track.audio.duration || 0));
       seek.max = String(total);
       $('time-total').textContent = clock(total);
@@ -652,7 +643,6 @@
 
   function expiresText(job) {
     const minutes = job.expires_at ? Math.max(0, Math.round((new Date(job.expires_at) - Date.now()) / 60000)) : job.expires_in_minutes;
-    // Pro: una semana y quedan en "Mis audios". Gratis e invitados: 1 hora.
     if (minutes > 120 && job.expires_at) {
       const date = new Date(job.expires_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' });
       return hasHistory()
@@ -666,7 +656,7 @@
     return text;
   }
 
-  // "Mis audios" (account.js) abre aqui un trabajo guardado. Devuelve false si ya no esta disponible.
+  // Abre un trabajo guardado de "Mis audios"
   window.abrirTrabajo = async (id) => {
     let job;
     try {
@@ -692,7 +682,7 @@
     $('results-error').hidden = !message;
   }
 
-  // Descarga en dos pasos: el servidor convierte el formato la primera vez (puede tardar).
+  // El servidor convierte el formato antes de descargar
   async function prepareDownload(button, baseUrl) {
     if (button.getAttribute('aria-disabled') === 'true') return;
     const url = `${baseUrl}?format=${encodeURIComponent($('format').value)}`;
@@ -722,7 +712,7 @@
 
   $('reset-mix').addEventListener('click', resetMix);
 
-  // "Volver": regresa al formulario con el mismo archivo, para elegir otra opcion sin subirlo de nuevo.
+  // Regresa al formulario con el mismo archivo
   $('results-back').addEventListener('click', () => {
     clearTracks();
     discardJob();
@@ -740,13 +730,13 @@
     window.scrollTo({ top: Math.max(0, $('flow-block').offsetTop - 88), behavior: reduced.matches ? 'auto' : 'smooth' });
   });
 
-  // Al salir de la pagina: se corta el flujo, se silencia el audio y se borra el trabajo del servidor.
+  // Al salir de la página se borra el trabajo
   window.addEventListener('pagehide', () => {
     clearTracks();
     discardJob();
   });
 
-  // Al iniciar o cerrar sesion, o al cambiar de plan, cambian los limites que se muestran.
+  // Los límites cambian al iniciar o cerrar sesión
   window.onSesion?.(() => { renderQuality(); renderRequirements(); });
   renderRequirements();
   updateAction();

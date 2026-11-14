@@ -1,4 +1,4 @@
-"""Envío de correos. Sin datos de SMTP en .env no se envía nada: el texto sale en la terminal."""
+"""Envío de correos. Sin SMTP en .env, el texto sale en la terminal."""
 import logging
 import smtplib
 from email.message import EmailMessage

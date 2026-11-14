@@ -12,7 +12,7 @@ from ..models.tablas import Usuario
 from ..repositories import usuarios as repo_usuarios
 from .cuotas import crear_periodo_gratis
 
-MAX_BYTES_PASSWORD = 72  # bcrypt no acepta más
+MAX_BYTES_PASSWORD = 72  # límite de bcrypt
 
 
 def _validar_datos(email: str, nombre: str, password: str) -> None:
@@ -35,7 +35,7 @@ def registrar(email: str, nombre: str, password: str) -> dict:
             usuario = repo_usuarios.crear(db, email, nombre, password_hash)
             crear_periodo_gratis(db, usuario.id)
             db.commit()
-        except IntegrityError:  # dos registros iguales a la vez
+        except IntegrityError:  # correo repetido
             db.rollback()
             raise HTTPException(409, "Ya existe una cuenta con ese email.")
     return {"id": usuario.id, "email": usuario.email, "nombre": usuario.nombre}
@@ -57,8 +57,7 @@ def login(email: str, password: str) -> dict:
 
 
 def abrir_sesion(db, usuario: Usuario) -> dict:
-    """Crea el token de una sesión nueva. Lo usan el login normal y el de Google/Facebook.
-    Quien llama hace el commit."""
+    """Crea el token de una sesión nueva."""
     ahora = ahora_utc()
     repo_usuarios.borrar_sesiones_vencidas(db, usuario.id, ahora)
     token = secrets.token_hex(32)
@@ -83,7 +82,7 @@ def logout(token: str) -> None:
 
 
 def usuario_por_token(token: str) -> Usuario:
-    """401 si el token no sirve."""
+    """Devuelve el usuario del token, o 401."""
     with SessionLocal() as db:
         sesion = repo_usuarios.buscar_sesion(db, token)
         if sesion is None or sesion.expira_en <= ahora_utc():

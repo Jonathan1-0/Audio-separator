@@ -1,4 +1,4 @@
-"""Prepara la base al arrancar: tablas, planes y la cuenta de administrador (si está en .env)."""
+"""Prepara la base al arrancar: tablas, planes y cuenta de administrador."""
 import logging
 from datetime import timedelta
 
@@ -6,7 +6,7 @@ import bcrypt
 
 from . import config
 from .database import Base, SessionLocal, ahora_utc, db_engine
-from .models import tablas  # noqa: F401 - registra las tablas en Base
+from .models import tablas  # registra las tablas
 from .repositories import suscripciones as repo_suscripciones
 from .repositories import usuarios as repo_usuarios
 
@@ -15,7 +15,7 @@ log = logging.getLogger("splitter.seed")
 PLANES = [
     {"nombre": "gratis", "precio_mensual": 0, "trabajos_por_mes": 5, "minutos_max_audio": 5, "mejor_calidad": False},
     {"nombre": "pro", "precio_mensual": 99, "trabajos_por_mes": 100, "minutos_max_audio": 20, "mejor_calidad": True},
-    # Solo para la cuenta de administrador; no se vende ni sale en la página de planes.
+    # Solo para la cuenta de administrador
     {"nombre": "admin", "precio_mensual": 0, "trabajos_por_mes": 100000, "minutos_max_audio": 120, "mejor_calidad": True},
 ]
 
@@ -32,11 +32,10 @@ def preparar_base() -> None:
 
 
 def preparar_admin() -> None:
-    """Crea la cuenta de administrador o la pone al día: contraseña de .env y plan admin activo."""
+    """Crea o actualiza la cuenta de administrador."""
     email, password = config.ADMIN_EMAIL, config.ADMIN_PASSWORD
     if not email or not password:
         return
-    # Las mismas reglas que una cuenta normal (services/auth.py).
     if len(password) < 8 or len(password.encode()) > 72:
         log.warning("SPLITTER_ADMIN_PASSWORD debe tener entre 8 y 72 caracteres; no se creó la cuenta de administrador")
         return

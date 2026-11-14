@@ -38,7 +38,7 @@ log = logging.getLogger("splitter.api")
 
 engine = build_engine()
 manager = JobManager(engine)
-# Un solo contador para toda la página: es el tope de gasto en Modal.
+# Tope de trabajos al día entre todos
 daily_limiter = RateLimiter(config.MAX_JOBS_PER_DAY, 24 * 3600, config.DATA_DIR / "limite_dia.json")
 ALL_USERS = "todos"
 
@@ -65,7 +65,7 @@ app.include_router(rutas_suscripcion.router)
 app.include_router(rutas_trabajos.router)
 
 
-# --- Utilidades
+# Utilidades
 def _safe_base_name(filename: str) -> str:
     stem = Path(filename).stem
     cleaned = re.sub(r"[^\w\- .()\[\]]", "_", stem, flags=re.UNICODE).strip(" .")
@@ -80,7 +80,7 @@ def _job_or_404(job_id: str) -> Job:
 
 
 def _job_del_solicitante(job_id: str, usuario: Optional[Usuario]) -> Job:
-    """El trabajo de una cuenta solo lo ve su dueño; el de un invitado, quien tenga su id."""
+    """El trabajo de una cuenta solo lo ve su dueño."""
     job = _job_or_404(job_id)
     if job.usuario_id is not None and (usuario is None or usuario.id != job.usuario_id):
         raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
@@ -91,13 +91,13 @@ def _public(job: Job) -> dict:
     data = {
         "id": job.id,
         "status": job.status,
-        "progress": job.progress,  # 0..1 o null
+        "progress": job.progress,  # 0 a 1
         "message": job.message,
         "error": job.error,
         "filename": job.original_name,
         "preset": job.preset,
         "queue_position": manager.queue_position(job.id),
-        "phase": job.phase,  # waiting_gpu | separating, solo en processing
+        "phase": job.phase,
     }
     if job.status == DONE:
         data["stems"] = [
@@ -109,7 +109,6 @@ def _public(job: Job) -> dict:
             for stem in job.stem_files
         ]
         data["download_all_url"] = f"/api/jobs/{job.id}/download"
-        # Invitado: JOB_TTL_MINUTES desde que terminó; con cuenta, lo que diga su plan.
         expira = job.expires_at or (job.finished_at or time.time()) + config.JOB_TTL_MINUTES * 60
         data["expires_in_minutes"] = max(0, round((expira - time.time()) / 60))
         data["expires_at"] = datetime.fromtimestamp(expira, timezone.utc).isoformat().replace("+00:00", "Z")
@@ -132,7 +131,7 @@ def _stem_path(job: Job, stem: str) -> Path:
     return path
 
 
-# --- Información general
+# Información general
 @app.get("/api/health")
 def health():
     return {
@@ -164,7 +163,7 @@ def get_config():
 
 
 async def _audio_seconds(path: Path) -> float:
-    """Sin la duración no se puede aplicar el límite del plan, así que el audio se rechaza."""
+    """Duración del audio en segundos."""
     if not media.ffprobe_available():
         log.error("ffprobe no está instalado: no se puede validar la duración del audio")
         raise HTTPException(503, "No se pudo revisar el audio. Intenta de nuevo más tarde.")
@@ -175,7 +174,7 @@ async def _audio_seconds(path: Path) -> float:
         raise HTTPException(415, "No se pudo leer el audio. Revisa que el archivo no esté dañado.")
 
 
-# --- Crear el trabajo
+# Crear el trabajo
 @app.post("/api/jobs", status_code=202)
 async def create_job(
     request: Request,
@@ -184,7 +183,7 @@ async def create_job(
     stems: str = Form(""),
     usuario: Optional[Usuario] = Depends(usuario_opcional),
 ):
-    """`stems`: pistas separadas por comas; vacío = todas."""
+    """Sube el audio y lo pone en la cola. `stems` vacío = todas las pistas."""
     if preset not in config.PRESETS:
         raise HTTPException(400, f"Preset inválido. Opciones: {', '.join(config.PRESETS)}.")
     available = config.PRESETS[preset]["stems"]
@@ -209,7 +208,7 @@ async def create_job(
         invitados.reservar(ip)
 
     def liberar_limites() -> None:
-        # Un archivo rechazado no cuenta.
+        # Un archivo rechazado no cuenta
         daily_limiter.release(ALL_USERS)
         if usuario is None:
             invitados.liberar(ip)
@@ -267,7 +266,7 @@ async def create_job(
     return _public(job)
 
 
-# --- Estado y progreso
+# Estado y progreso
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opcional)):
     return _public(_job_del_solicitante(job_id, usuario))
@@ -275,7 +274,7 @@ def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
 
 @app.get("/api/jobs/{job_id}/events")
 async def job_events(job_id: str, request: Request):
-    """SSE: manda el trabajo cada vez que cambia."""
+    """Manda el trabajo cada vez que cambia (SSE)."""
     await run_in_threadpool(_job_or_404, job_id)
 
     async def stream():
@@ -290,7 +289,6 @@ async def job_events(job_id: str, request: Request):
                 yield "event: gone\ndata: {}\n\n"
                 return
             pos = manager.queue_position(job_id)
-            # Uno terminado puede venir de la base, sin contador de versión.
             if job.version != last_version or pos != last_pos or job.status in (DONE, ERROR):
                 last_version, last_pos = job.version, pos
                 yield f"event: update\ndata: {json.dumps(_public(job))}\n\n"
@@ -309,10 +307,10 @@ async def job_events(job_id: str, request: Request):
     )
 
 
-# --- Vista previa y descargas
+# Vista previa y descargas
 @app.get("/api/jobs/{job_id}/stems/{stem}/preview")
 async def stem_preview(job_id: str, stem: str):
-    """MP3 liviano para escuchar en la página."""
+    """MP3 ligero para escuchar en la página."""
     job = await run_in_threadpool(_job_or_404, job_id)
     path = _stem_path(job, stem)
     try:
@@ -322,7 +320,7 @@ async def stem_preview(job_id: str, stem: str):
     return FileResponse(mp3, media_type="audio/mpeg")
 
 
-# Con prepare=1 solo se convierte (queda en caché); la página muestra "Preparando…" y luego descarga.
+# Con prepare=1 solo convierte y deja el archivo listo
 @app.get("/api/jobs/{job_id}/stems/{stem}/download")
 async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bool = False):
     job = await run_in_threadpool(_job_or_404, job_id)
@@ -362,7 +360,7 @@ def delete_job(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
     manager.delete(job_id)
 
 
-# --- La página: splitter/frontend, o la carpeta de SPLITTER_FRONTEND_DIR
+# La página
 _frontend = os.getenv("SPLITTER_FRONTEND_DIR") or str(Path(__file__).resolve().parent.parent / "frontend")
 if Path(_frontend).is_dir():
     app.mount("/", StaticFiles(directory=_frontend, html=True), name="frontend")

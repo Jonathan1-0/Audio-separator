@@ -1,6 +1,5 @@
-// Dialogo de inicio de sesion y registro. Las llamadas al backend viven en account.js
-// (window.iniciarSesion / window.registrarse), que tambien guarda la sesion.
-// Motion is optional: if the CDN is unreachable the modal still works, without animation.
+// Diálogo de inicio de sesión, registro y recuperación.
+// Las animaciones son opcionales: sin ellas el diálogo funciona igual.
 const MOTION_URL = 'https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm';
 const EASE = [0.22, 1, 0.36, 1];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -23,17 +22,17 @@ const modes = {
   login: { title: 'Inicia sesión', lead: 'Guarda tus separaciones y vuelve a ellas cuando quieras.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
   reset: { title: 'Recupera tu acceso', lead: 'Escribe tu correo y te enviaremos un enlace para elegir otra contraseña.', submit: 'Enviar enlace', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login' },
-  // Se abre al llegar desde el enlace del correo (#restablecer=CODIGO).
+  // Se abre desde el enlace del correo
   newpass: { title: 'Elige tu nueva contraseña', lead: 'Escríbela dos veces para confirmar.', submit: 'Guardar contraseña', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login', autocomplete: 'new-password' },
 };
-let resetCode = '';        // codigo del enlace de recuperacion
-let socialReady = false;   // hay al menos un proveedor configurado
+let resetCode = '';  // código del enlace de recuperación
+let socialReady = false;  // hay Google o Facebook configurado
 let mode = 'login';
 let opener = null;
 let closing = false;
 let flip = null;
 
-// Direct children of the form that are visible, minus the close button.
+// Elementos visibles del formulario, sin el botón de cerrar
 const contentItems = () => [...form.children].filter((el) => el.id !== 'login-close' && !el.hidden);
 const clearInline = (...elements) => elements.forEach((el) => { el.style.removeProperty('opacity'); el.style.removeProperty('transform'); });
 const enter = (targets, from, delay) => motion.animate(targets, { opacity: [0, 1], y: [from, 0] }, { duration: 0.3, ease: EASE, delay }).finished.then(() => clearInline(...[].concat(targets)));
@@ -41,7 +40,7 @@ const enter = (targets, from, delay) => motion.animate(targets, { opacity: [0, 1
 function setMessage(text = '', ok = false) {
   message.textContent = text;
   message.hidden = !text;
-  message.classList.toggle('is-ok', ok);   // verde para avisos, rojo para errores
+  message.classList.toggle('is-ok', ok);
 }
 
 function setMode(next) {
@@ -54,7 +53,7 @@ function setMode(next) {
   $('switch-link').textContent = m.switchLink;
   $('switch-link').dataset.modeTarget = m.next;
   $('password-fields').hidden = next === 'reset';
-  const choosing = next === 'register' || next === 'newpass';   // se elige una contrasena nueva
+  const choosing = next === 'register' || next === 'newpass';
   $('confirm-field').hidden = !choosing;
   $('password-hint').hidden = !choosing;
   $('email-field').hidden = next === 'newpass';
@@ -77,8 +76,7 @@ function endFlip() {
   form.style.removeProperty('transform');
 }
 
-// Height changes are animated with transform only: the panel is scaled from its old
-// height to its new one while the form is counter-scaled, so text is never stretched.
+// El cambio de altura se anima con transform
 function morph(change, fadeIn) {
   if (!canAnimate()) { change(); return; }
   endFlip();
@@ -123,7 +121,7 @@ async function requestClose() {
       motion.animate(scrim, { opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished,
       motion.animate(panel, { opacity: [1, 0], y: [0, 8] }, { duration: 0.2, ease: EASE }).finished,
     ]);
-    // A page that is not painting (background tab) never finishes its animations.
+    // En una pestaña en segundo plano la animación no termina
     await Promise.race([exit, new Promise((resolve) => setTimeout(resolve, 400))]);
   }
   dialog.close();
@@ -137,7 +135,6 @@ document.querySelectorAll('[data-open-login]').forEach((button) => {
 form.addEventListener('click', (event) => {
   const provider = event.target.closest('[data-provider]');
   if (provider) {
-    // El servidor manda a la pagina de Google o Facebook y al terminar regresa aqui con la sesion.
     location.href = `/auth/social/${provider.dataset.provider}`;
     return;
   }
@@ -147,7 +144,7 @@ form.addEventListener('click', (event) => {
   (mode === 'register' ? nameInput : email).focus();
 });
 $('login-close').addEventListener('click', requestClose);
-// Escape runs the exit animation instead of closing the dialog abruptly.
+// Escape cierra con animación
 dialog.addEventListener('cancel', (event) => { event.preventDefault(); requestClose(); });
 dialog.addEventListener('close', () => {
   form.reset();
@@ -156,8 +153,7 @@ dialog.addEventListener('close', () => {
   opener?.focus();
 });
 
-// Only close on the backdrop when the press also started there, not when a text
-// selection drag from an input ends outside the panel.
+// Solo se cierra si el clic empezó y terminó en el fondo
 let pressedBackdrop = false;
 const isBackdrop = (target) => target === dialog || target === scrim;
 dialog.addEventListener('pointerdown', (event) => { pressedBackdrop = isBackdrop(event.target); });
@@ -166,7 +162,7 @@ dialog.addEventListener('click', (event) => {
   pressedBackdrop = false;
 });
 
-// Keep Tab inside the dialog.
+// El Tab se queda dentro del diálogo
 dialog.addEventListener('keydown', (event) => {
   if (event.key !== 'Tab') return;
   const focusable = [...dialog.querySelectorAll('button, input, a[href]')].filter((el) => !el.disabled && el.getClientRects().length > 0);
@@ -249,7 +245,7 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-// Botones de Google y Facebook: solo se muestran los que el servidor tiene configurados.
+// Solo se muestran los botones configurados en el servidor
 window.proveedoresSociales?.().then((disponibles) => {
   for (const button of form.querySelectorAll('[data-provider]')) {
     button.hidden = !disponibles[button.dataset.provider];
@@ -258,7 +254,7 @@ window.proveedoresSociales?.().then((disponibles) => {
   if (dialog.open) setMode(mode); else $('social-auth').hidden = !socialReady;
 });
 
-// Llegada desde el correo de recuperacion: index.html#restablecer=CODIGO abre el paso de nueva contrasena.
+// Llegada desde el correo: #restablecer=CODIGO
 const arrival = location.hash.match(/^#restablecer=(.+)$/);
 if (arrival) {
   resetCode = arrival[1];
