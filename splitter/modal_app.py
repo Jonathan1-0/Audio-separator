@@ -1,4 +1,4 @@
-"""Lo que corre en la GPU de Modal. Para subirlo:
+"""Separación de audio en la GPU de Modal. Para subirlo:
     SPLITTER_GPU=L4 modal deploy modal_app.py   # splitter-gpu-l4
 """
 from __future__ import annotations
