@@ -1,4 +1,4 @@
-"""Visor de la base. Uso: python ver_base.py y abrir http://127.0.0.1:8770/"""
+"""Visor de la base de datos. Uso: python ver_base.py y abrir http://127.0.0.1:8770/"""
 import html
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
