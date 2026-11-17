@@ -255,7 +255,7 @@ void main(){ gl_FragColor = smokeAt(gl_FragCoord.xy, res, t); }`;
       lightReady = true;
       dirty = true;
     };
-    img.src = 'light.svg';
+    img.src = 'light.svg?v=esquina1';
   }
 
   // ---- Lentes ----

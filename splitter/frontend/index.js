@@ -664,6 +664,8 @@
   // Cada pista es su propio <audio> y suenan todas a la vez. El volumen va por Web Audio porque en iPhone `audio.volume` no se puede cambiar.
   const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
   const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>';
+  const SONIDO_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>';
+  const SILENCIO_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>';
   let actx = null;
   let tracks = [];
   let playing = false;
@@ -744,50 +746,93 @@
       if (track.gain) continue;
       track.source = actx.createMediaElementSource(track.audio);
       track.gain = actx.createGain();
-      track.gain.gain.value = track.volume;
+      track.gain.gain.value = volumenReal(track);
       track.source.connect(track.gain).connect(actx.destination);
     }
     if (actx.state === 'suspended') actx.resume();
   }
 
+  // Volumen que suena: 0 si la pista esta silenciada (el deslizador conserva su valor).
+  const volumenReal = (track) => (track.muted ? 0 : track.volume);
+  function aplicarVolumen(track) {
+    if (track.gain) track.gain.gain.value = volumenReal(track);
+    else track.audio.volume = volumenReal(track);
+  }
   function setVolume(track, value) {
     track.volume = value;
-    if (track.gain) track.gain.gain.value = value;
-    else track.audio.volume = value;
+    aplicarVolumen(track);
+  }
+
+  // Control central de las pistas. Antes cada pista pausaba o reanudaba a las demas por su cuenta y, al
+  // adelantar (todas cargan a la vez), se armaba una cadena que podia dejar todo detenido con el boton en
+  // "pausa". Ahora: se pausan todas, se ponen en el mismo segundo, se espera a que todas tengan datos y
+  // arrancan juntas. Cada arranque tiene un numero: si llega otro (pausa, otro salto), el anterior se cancela.
+  let arranque = 0;
+  let ajustando = false;
+  const listas = () => tracks.every((track) => track.audio.readyState >= 3);   // HAVE_FUTURE_DATA
+  function esperarListas(numero) {
+    return new Promise((resolve) => {
+      const revisar = () => {
+        if (numero !== arranque) resolve(false);
+        else if (listas()) resolve(true);
+        else setTimeout(revisar, 40);
+      };
+      revisar();
+    });
+  }
+  async function arrancarJuntas(desde) {
+    const numero = ++arranque;
+    ajustando = true;
+    for (const track of tracks) track.audio.pause();
+    for (const track of tracks) if (Math.abs(track.audio.currentTime - desde) > 0.01) track.audio.currentTime = desde;
+    const ok = await esperarListas(numero);
+    if (!ok || numero !== arranque || !playing) { if (numero === arranque) ajustando = false; return; }
+    try {
+      await Promise.all(tracks.map((track) => track.audio.play()));
+      $('player-status').textContent = '';
+    } catch (error) {
+      // AbortError: se pauso o se salto mientras arrancaba; lo maneja el arranque nuevo.
+      if (numero !== arranque || (error && error.name === 'AbortError')) return;
+      pauseAll();
+      $('player-status').textContent = 'No se pudo reproducir. Intenta de nuevo.';
+    } finally {
+      if (numero === arranque) ajustando = false;
+    }
   }
 
   async function playAll() {
     if (!tracks.length) return;
     connectAudio();
-    const at = tracks[0].audio.currentTime;
-    for (const track of tracks) if (Math.abs(track.audio.currentTime - at) > 0.01) track.audio.currentTime = at;
     setPlaying(true);
-    try {
-      await Promise.all(tracks.map((track) => track.audio.play()));
-      $('player-status').textContent = '';
-    } catch (error) {
-      // AbortError: se pauso antes de arrancar (el usuario, o mientras otra pista carga).
-      if (error && error.name === 'AbortError') return;
-      pauseAll();
-      $('player-status').textContent = 'No se pudo reproducir. Intenta de nuevo.';
-    }
+    await arrancarJuntas(tracks[0].audio.currentTime);
   }
 
-  function pauseAll() { for (const track of tracks) track.audio.pause(); setPlaying(false); }
+  function pauseAll() {
+    arranque++;   // cancela un arranque que estuviera esperando
+    ajustando = false;
+    setPlaying(false);
+    for (const track of tracks) track.audio.pause();
+  }
 
   function showTime(seconds) {
     $('time-now').textContent = clock(seconds);
     if (!dragging) { seek.value = seconds; fillOf(seek); }
   }
 
-  function seekAll(seconds) { for (const track of tracks) track.audio.currentTime = seconds; showTime(seconds); }
+  function seekAll(seconds) {
+    showTime(seconds);
+    if (playing) { arrancarJuntas(seconds); return; }
+    for (const track of tracks) track.audio.currentTime = seconds;
+  }
 
   function sync() {
     // Cada pista lleva su propio reloj: la que se desfasa se alinea con la primera.
     if (!tracks.length) return;
     const lead = tracks[0].audio;
-    for (const track of tracks.slice(1)) {
-      if (!track.audio.paused && Math.abs(track.audio.currentTime - lead.currentTime) > 0.08) track.audio.currentTime = lead.currentTime;
+    if (!ajustando) {
+      for (const track of tracks.slice(1)) {
+        if (!track.audio.paused && Math.abs(track.audio.currentTime - lead.currentTime) > 0.12) track.audio.currentTime = lead.currentTime;
+      }
     }
     showTime(lead.currentTime);
   }
@@ -813,25 +858,34 @@
     button.className = 'secondary-button';
     button.textContent = 'Descargar';
     button.setAttribute('aria-label', `Descargar ${name}`);
-    row.append(title, slider, percent, button);
+    // Silenciar la pista sin perder el volumen elegido
+    const mute = document.createElement('button');
+    mute.type = 'button';
+    mute.className = 'track-mute';
+    mute.innerHTML = SONIDO_ICON;
+    mute.setAttribute('aria-pressed', 'false');
+    mute.setAttribute('aria-label', `Silenciar ${name}`);
+    row.append(title, mute, slider, percent, button);
 
     const audio = new Audio();
     audio.preload = 'auto';
     audio.src = stem.preview_url;
-    const track = { audio, volume: 1, gain: null, source: null };
+    const track = { audio, volume: 1, muted: false, gain: null, source: null };
+    mute.addEventListener('click', () => {
+      track.muted = !track.muted;
+      aplicarVolumen(track);
+      row.classList.toggle('is-muted', track.muted);
+      mute.innerHTML = track.muted ? SILENCIO_ICON : SONIDO_ICON;
+      mute.setAttribute('aria-pressed', String(track.muted));
+      mute.setAttribute('aria-label', `${track.muted ? 'Activar sonido de' : 'Silenciar'} ${name}`);
+    });
     range.addEventListener('input', () => {
       setVolume(track, range.value / 100);
       percent.textContent = `${range.value}%`;
     });
     button.addEventListener('click', () => prepareDownload(button, stem.download_url));
-    // Si una pista se queda cargando, las demas la esperan; al volver se igualan a su tiempo.
-    audio.addEventListener('waiting', () => { if (playing) for (const other of tracks) if (other !== track) other.audio.pause(); });
-    audio.addEventListener('playing', () => {
-      if (!playing) return;
-      for (const other of tracks) {
-        if (other.audio.paused) { other.audio.currentTime = audio.currentTime; other.audio.play().catch(() => {}); }
-      }
-    });
+    // Si una pista se queda sin datos a media reproduccion, todas esperan y vuelven a arrancar juntas.
+    audio.addEventListener('waiting', () => { if (playing && !ajustando) arrancarJuntas(tracks[0].audio.currentTime); });
     tracks.push(track);
     $('track-list').append(row);
     return track;

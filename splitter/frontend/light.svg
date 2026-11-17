@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="none">
   <defs>
-    <radialGradient id="source" gradientUnits="userSpaceOnUse" cx="1060" cy="-170" r="800" gradientTransform="translate(1060 -170) scale(1 .7) translate(-1060 170)">
+    <radialGradient id="source" gradientUnits="userSpaceOnUse" cx="1560" cy="-150" r="820" gradientTransform="translate(1560 -150) scale(1 .7) translate(-1560 150)">
       <stop offset="0" stop-color="#D8DEDF" stop-opacity=".5"/>
       <stop offset=".4" stop-color="#ABB5B6" stop-opacity=".2"/>
       <stop offset="1" stop-color="#89969A" stop-opacity="0"/>
@@ -27,13 +27,14 @@
     </mask>
   </defs>
   <g mask="url(#fade)">
-  <ellipse cx="1060" cy="-170" rx="800" ry="560" fill="url(#source)"/>
+  <ellipse cx="1560" cy="-150" rx="820" ry="570" fill="url(#source)"/>
   <g filter="url(#soft)" fill="url(#along)">
-    <polygon points="1000,-120 1110,-120 560,1100 300,1100"/>
-    <polygon points="1060,-120 1150,-120 960,1100 740,1100"/>
-    <polygon points="1100,-120 1180,-120 1300,1100 1110,1100"/>
-    <polygon points="960,-120 1030,-120 -60,1100 -300,1100"/>
-    <polygon points="1130,-120 1200,-120 1650,1100 1470,1100"/>
+    <!-- Rayos que salen de la esquina superior derecha y bajan en diagonal hacia la izquierda -->
+    <polygon points="1500,-120 1590,-120 760,1100 480,1100"/>
+    <polygon points="1545,-120 1625,-120 1110,1100 880,1100"/>
+    <polygon points="1580,-120 1650,-120 1430,1100 1240,1100"/>
+    <polygon points="1450,-120 1525,-120 200,1100 -120,1100"/>
+    <polygon points="1610,-120 1670,-120 1720,1100 1580,1100"/>
   </g>
   </g>
 </svg>
