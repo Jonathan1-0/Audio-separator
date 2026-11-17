@@ -1,7 +1,7 @@
-// Solo presentación; el formulario lo maneja index.js.
+// Presentation only: index.js owns form state and validation.
 (() => {
   'use strict';
-  // Cada barra mezcla los dos tonos vecinos
+  // Aged Gold -> Soft Champagne -> Warm Stone -> Muted Olive: cada barra mezcla los dos tonos vecinos segun su posicion.
   const TONES = ['voz', 'bateria', 'bajo', 'otros'].map(name => `var(--stem-${name})`);
   function toneAt(position) {
     const scaled = position * (TONES.length - 1);
@@ -34,9 +34,9 @@
     drawWave(element, names, Math.round(32 / names.length));
   });
 
-  // La aparición la hace el CSS
+  // CSS handles the reveal. No scroll loop or animation library is needed.
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
-  // El formulario se revela como un solo bloque
+  // El formulario es un solo bloque (.flow-block): se revela entero, con el formulario, el proceso o los resultados dentro.
   const sections = [...document.querySelectorAll('.flow-block')];
   let observer;
   function setupReveals() {
@@ -54,7 +54,7 @@
       });
     }, { threshold: 0, rootMargin: '0px 0px -32px 0px' });
     sections.forEach(section => {
-      // Lo que ya está a la vista no se anima
+      // Content already in view remains visible, avoiding a flash on load.
       const box = section.getBoundingClientRect();
       if (box.top < innerHeight && box.bottom > 0) section.classList.add('is-visible');
       if (!section.classList.contains('is-visible')) section.classList.add('reveal-pending');
@@ -64,4 +64,25 @@
   }
   setupReveals();
   motion.addEventListener('change', setupReveals);
+
+  // Campo de luz: nace en lo alto de la pagina y baja hasta el final de "¿Qué quieres hacer?" (el vidrio sigue refractandolo).
+  const light = document.querySelector('.workspace > .light');
+  const modeSection = document.getElementById('mode-section');
+  if (light && modeSection) {
+    const fitLight = () => {
+      const work = light.parentElement.getBoundingClientRect();
+      let mode = modeSection.getBoundingClientRect();
+      // Con los resultados a la vista la seccion se oculta (rect en ceros): se usa el bloque completo.
+      if (!mode.height) mode = document.getElementById('flow-block').getBoundingClientRect();
+      light.style.height = `${Math.max(Math.round(mode.bottom - work.top + 60), 0)}px`;
+    };
+    fitLight();
+    addEventListener('resize', fitLight);
+    addEventListener('load', fitLight);
+    if ('ResizeObserver' in window) {
+      const observer = new ResizeObserver(fitLight);
+      observer.observe(modeSection);
+      observer.observe(document.getElementById('flow-block'));
+    }
+  }
 })();

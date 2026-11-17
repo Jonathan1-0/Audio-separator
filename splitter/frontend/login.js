@@ -1,5 +1,6 @@
-// Diálogo de inicio de sesión, registro y recuperación.
-// Las animaciones son opcionales: sin ellas el diálogo funciona igual.
+// Dialogo de inicio de sesion y registro. Las llamadas al backend viven en account.js
+// (window.iniciarSesion / window.registrarse), que tambien guarda la sesion.
+// Motion is optional: if the CDN is unreachable the modal still works, without animation.
 const MOTION_URL = 'https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm';
 const EASE = [0.22, 1, 0.36, 1];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -19,28 +20,27 @@ const nameInput = $('login-name');
 const submit = $('login-submit');
 const message = $('login-message');
 const modes = {
-  login: { title: 'Inicia sesión', lead: 'Guarda tus separaciones y vuelve a ellas cuando quieras.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
+  login: { title: 'Inicia sesión', lead: 'Tu plan, tus límites y, con Pro, tus audios guardados en Mis audios.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
   reset: { title: 'Recupera tu acceso', lead: 'Escribe tu correo y te enviaremos un enlace para elegir otra contraseña.', submit: 'Enviar enlace', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login' },
-  // Se abre desde el enlace del correo
   newpass: { title: 'Elige tu nueva contraseña', lead: 'Escríbela dos veces para confirmar.', submit: 'Guardar contraseña', switchText: '¿Ya la recuerdas?', switchLink: 'Volver a iniciar sesión', next: 'login', autocomplete: 'new-password' },
 };
-let resetCode = '';  // código del enlace de recuperación
-let socialReady = false;  // hay Google o Facebook configurado
 let mode = 'login';
+let resetCode = '';        // codigo del enlace del correo (#restablecer=CODIGO)
+let socialReady = false;   // hay al menos un proveedor (Google/Facebook) configurado en el servidor
 let opener = null;
 let closing = false;
 let flip = null;
 
-// Elementos visibles del formulario, sin el botón de cerrar
+// Direct children of the form that are visible, minus the close button.
 const contentItems = () => [...form.children].filter((el) => el.id !== 'login-close' && !el.hidden);
 const clearInline = (...elements) => elements.forEach((el) => { el.style.removeProperty('opacity'); el.style.removeProperty('transform'); });
 const enter = (targets, from, delay) => motion.animate(targets, { opacity: [0, 1], y: [from, 0] }, { duration: 0.3, ease: EASE, delay }).finished.then(() => clearInline(...[].concat(targets)));
 
 function setMessage(text = '', ok = false) {
   message.textContent = text;
+  message.classList.toggle('is-ok', ok && Boolean(text));
   message.hidden = !text;
-  message.classList.toggle('is-ok', ok);
 }
 
 function setMode(next) {
@@ -52,8 +52,8 @@ function setMode(next) {
   $('switch-text').textContent = m.switchText;
   $('switch-link').textContent = m.switchLink;
   $('switch-link').dataset.modeTarget = m.next;
+  const choosing = next === 'register' || next === 'newpass';   // se elige una contrasena nueva
   $('password-fields').hidden = next === 'reset';
-  const choosing = next === 'register' || next === 'newpass';
   $('confirm-field').hidden = !choosing;
   $('password-hint').hidden = !choosing;
   $('email-field').hidden = next === 'newpass';
@@ -76,7 +76,8 @@ function endFlip() {
   form.style.removeProperty('transform');
 }
 
-// El cambio de altura se anima con transform
+// Height changes are animated with transform only: the panel is scaled from its old
+// height to its new one while the form is counter-scaled, so text is never stretched.
 function morph(change, fadeIn) {
   if (!canAnimate()) { change(); return; }
   endFlip();
@@ -121,7 +122,7 @@ async function requestClose() {
       motion.animate(scrim, { opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished,
       motion.animate(panel, { opacity: [1, 0], y: [0, 8] }, { duration: 0.2, ease: EASE }).finished,
     ]);
-    // En una pestaña en segundo plano la animación no termina
+    // A page that is not painting (background tab) never finishes its animations.
     await Promise.race([exit, new Promise((resolve) => setTimeout(resolve, 400))]);
   }
   dialog.close();
@@ -144,7 +145,7 @@ form.addEventListener('click', (event) => {
   (mode === 'register' ? nameInput : email).focus();
 });
 $('login-close').addEventListener('click', requestClose);
-// Escape cierra con animación
+// Escape runs the exit animation instead of closing the dialog abruptly.
 dialog.addEventListener('cancel', (event) => { event.preventDefault(); requestClose(); });
 dialog.addEventListener('close', () => {
   form.reset();
@@ -153,7 +154,8 @@ dialog.addEventListener('close', () => {
   opener?.focus();
 });
 
-// Solo se cierra si el clic empezó y terminó en el fondo
+// Only close on the backdrop when the press also started there, not when a text
+// selection drag from an input ends outside the panel.
 let pressedBackdrop = false;
 const isBackdrop = (target) => target === dialog || target === scrim;
 dialog.addEventListener('pointerdown', (event) => { pressedBackdrop = isBackdrop(event.target); });
@@ -162,7 +164,7 @@ dialog.addEventListener('click', (event) => {
   pressedBackdrop = false;
 });
 
-// El Tab se queda dentro del diálogo
+// Keep Tab inside the dialog.
 dialog.addEventListener('keydown', (event) => {
   if (event.key !== 'Tab') return;
   const focusable = [...dialog.querySelectorAll('button, input, a[href]')].filter((el) => !el.disabled && el.getClientRects().length > 0);
@@ -191,14 +193,16 @@ form.addEventListener('submit', async (event) => {
   if (mode === 'reset') {
     sending = true;
     submit.disabled = true;
+    setMessage();
     try {
-      const { mensaje } = await window.recuperarPassword(email.value.trim());
-      showMessage(mensaje, true);
+      const r = await window.recuperarPassword(email.value.trim());
+      showMessage(r?.mensaje || 'Si el correo está registrado, te enviamos un enlace.', true);
     } catch (error) {
       showMessage(error.message);
+    } finally {
+      sending = false;
+      submit.disabled = false;
     }
-    sending = false;
-    submit.disabled = false;
     return;
   }
   if (!password.value) {
@@ -223,13 +227,13 @@ form.addEventListener('submit', async (event) => {
   setMessage();
   try {
     if (mode === 'newpass') {
-      const { mensaje } = await window.restablecerPassword(resetCode, password.value);
+      const r = await window.restablecerPassword(resetCode, password.value);
       resetCode = '';
+      form.reset();
       sending = false;
       submit.disabled = false;
-      form.reset();
-      switchMode('login');
-      showMessage(mensaje, true);
+      const texto = r?.mensaje || 'Contraseña actualizada. Ya puedes iniciar sesión.';
+      morph(() => { setMode('login'); setMessage(texto, true); }, () => contentItems().filter((el) => !el.classList.contains('login-brand')));
       email.focus();
       return;
     }
@@ -245,19 +249,20 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-// Solo se muestran los botones configurados en el servidor
-window.proveedoresSociales?.().then((disponibles) => {
-  for (const button of form.querySelectorAll('[data-provider]')) {
-    button.hidden = !disponibles[button.dataset.provider];
-    if (!button.hidden) socialReady = true;
-  }
-  if (dialog.open) setMode(mode); else $('social-auth').hidden = !socialReady;
+// Proveedores sociales: solo se muestran los que el servidor tiene configurados.
+window.proveedoresSociales().then((disponibles) => {
+  document.querySelectorAll('[data-provider]').forEach((button) => {
+    button.hidden = !disponibles?.[button.dataset.provider];
+  });
+  socialReady = Object.values(disponibles || {}).some(Boolean);
+  if (dialog.open) setMode(mode);
+  else $('social-auth').hidden = !socialReady;
 });
 
-// Llegada desde el correo: #restablecer=CODIGO
-const arrival = location.hash.match(/^#restablecer=(.+)$/);
-if (arrival) {
-  resetCode = arrival[1];
+// Enlace del correo: /#restablecer=CODIGO abre el dialogo para elegir la nueva contrasena.
+const enlace = /^#restablecer=(.+)$/.exec(location.hash);
+if (enlace) {
+  try { resetCode = decodeURIComponent(enlace[1]); } catch { resetCode = enlace[1]; }
   history.replaceState(null, '', location.pathname + location.search);
   openDialog(null, 'newpass');
 }

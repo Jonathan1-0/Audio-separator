@@ -1,4 +1,10 @@
-// Efecto de vidrio (liquidGL) en las opciones del formulario.
+// Vidrio en las opciones elegibles. Lo dibuja glass-gl.js (window.SplitterGlass); aqui solo se decide donde
+// esta cada lente, como viaja y su tinte.
+//  A) Tarjetas de modo y conmutador de calidad: UNA lente por grupo que viaja a la opcion
+//     seleccionada, o a la que tiene el cursor encima, y regresa al salir.
+//  B) Pastillas de descarga (seleccion multiple): una lente por pastilla, montadas desde load;
+//     nunca se crean ni se destruyen, solo se muestran y cambia su tinte.
+// Los <input> siguen siendo la fuente de verdad; aqui solo se refleja cual esta marcado.
 (() => {
   'use strict';
   const form = document.getElementById('splitter-form');
@@ -8,67 +14,27 @@
 
   const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const TRAVEL_MS = 460;
-  const STRETCH_SQUASH = 0.94;
-  const STRETCH_PEAK = 0.38;
-  const TINT_FULL = 'rgba(234, 234, 236, 0.24)';
-  const TINT_HALF = 'rgba(234, 234, 236, 0.12)';
-  // La captura se hace sobre el body, a resolución limitada
-  const page = Math.max(document.documentElement.scrollHeight, document.documentElement.scrollWidth, 1);
-  const RESOLUTION = Math.min(1, 4096 / page);
-  const OPTIONS = {
-    snapshot: 'body',
-    resolution: RESOLUTION,
-    zIndex: 1,
-    refraction: 0.016,
-    aberration: 0,
-    bevelDepth: 0.014,
-    bevelWidth: 0.071,
-    frost: 0,
-    shadow: false,
-    specular: true,
-    reveal: 'none',
-    tilt: false,
-    draggable: false,
-    interaction: 'fluid',
-    interactionStrength: 0.5,
-    interactionRadius: 3,
-    interactionViscosity: 0.25,
-    magnify: 1.05,
-    tint: TINT_FULL,
-  };
-  // Elementos pequeños: más refracción y bisel
-  const SMALL = { ...OPTIONS, refraction: 0.03, bevelDepth: 0.03, bevelWidth: 0.12, magnify: 1.08 };
-  // En reposo se dibuja más lento; con actividad, a toda velocidad
-  const IDLE_FPS = 10;
+  const STRETCH_SQUASH = 0.94;   // el eje transversal se afina mientras la lente se alarga
+  const STRETCH_PEAK = 0.38;     // punto del viaje en que la lente esta mas alargada
+  // Tinte del color de fondo (--bg): marcada = TINT_FULL, con el cursor encima = TINT_HALF.
+  // glass-gl.js lo traduce a su propio matiz (setTint).
+  function bgRgba(alpha) {
+    const hex = getComputedStyle(root).getPropertyValue('--bg').trim().replace('#', '');
+    const n = parseInt(hex.length === 3 ? hex.replace(/./g, '$&$&') : hex, 16);
+    return Number.isNaN(n) ? `rgba(10, 10, 10, ${alpha})` : `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+  // Vidrio claro (como la referencia): el tinte apenas matiza. glass-gl.js lo traduce a alpha * 0.25.
+  const TINT_FULL = bgRgba(0.08);
+  const TINT_HALF = bgRgba(0.2);
+  // ---- Ritmo de dibujo ----
+  // glass-gl.js ya redibuja solo con el scroll, el cursor y el teclado. Aqui se le avisa de la actividad propia:
+  // el viaje de la lente y los cambios de seleccion, para que dibuje a pleno ritmo mientras duran.
   const ACTIVE_MS = 700;
-  let activeUntil = 0;
-  const poke = (ms = ACTIVE_MS) => { activeUntil = Math.max(activeUntil, performance.now() + ms); };
-  for (const type of ['pointerdown', 'wheel', 'touchmove', 'keydown', 'scroll', 'resize']) {
-    window.addEventListener(type, () => poke(), { passive: true, capture: true });
-  }
-  // El cursor solo cuenta cuando está sobre una opción
-  const GLASS_AREA = '.mode-grid, #quality-options, #track-options';
-  window.addEventListener('pointermove', (event) => {
-    if (event.target instanceof Element && event.target.closest(GLASS_AREA)) poke();
-  }, { passive: true, capture: true });
-  function throttleIdleRendering() {
-    const renderer = window.__liquidGLRenderer__;
-    if (!renderer || renderer.__throttled) return;
-    renderer.__throttled = true;
-    const draw = renderer.render;
-    let lastDraw = 0;
-    renderer.render = function throttledRender() {
-      const now = performance.now();
-      if (now > activeUntil && now - lastDraw < 1000 / IDLE_FPS) return undefined;
-      lastDraw = now;
-      return draw.call(this);
-    };
-  }
+  const poke = (ms = ACTIVE_MS) => { window.SplitterGlass?.poke(ms); };
   const isChecked = (option) => Boolean(option.querySelector('input')?.checked);
   const isMouse = (event) => event.pointerType === 'mouse';
-  const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-  // ---- Una lente que viaja por grupo ----
+  // ---- A) Una lente que viaja por grupo ----
   function createTravelingLens(container, optionSelector, lensEl, { follow = false } = {}) {
     let lens = null;
     let hovered = null;
@@ -85,14 +51,16 @@
       lens?.setTint?.(value);
     }
 
-    // La lente sigue al cursor y al salir regresa a la opción elegida
+    // ---- Seguimiento del cursor (solo con follow): la lente acompana al raton frame a frame dentro del
+    // contenedor, con un suavizado corto, y al salir regresa a la opcion elegida con el viaje de siempre.
     const FOLLOW_TAU_MS = 55;
-    let cursor = null;  // posición del cursor
-    let pos = null;  // posición de la lente
+    let cursor = null;   // posicion del cursor en coordenadas del contenedor
+    let pos = null;      // posicion actual de la lente
     let raf = 0;
     let last = 0;
     const clamp = (value, max) => Math.min(Math.max(value, 0), Math.max(max, 0));
-    // Las medidas se toman una vez y se actualizan al cambiar el tamaño
+    // Geometria de las opciones medida UNA vez (no en cada frame): leer offsetLeft/offsetWidth de todas las
+    // opciones 60 veces por segundo fuerza un layout tras cada escritura de transform. Se invalida al cambiar el tamano.
     let geo = null;
     function measure() {
       const all = options();
@@ -101,7 +69,7 @@
       const w = first.offsetWidth;
       const h = first.offsetHeight;
       const rects = all.map((el) => ({ el, l: el.offsetLeft, t: el.offsetTop, r: el.offsetLeft + el.offsetWidth, b: el.offsetTop + el.offsetHeight }));
-      // La lente no sale del área de las opciones
+      // La lente no sale del area que ocupan las opciones (el contenedor puede tener relleno).
       return {
         w,
         h,
@@ -127,7 +95,7 @@
       lensEl.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
       const under = geo.rects.find((o) => cursor.x >= o.l && cursor.x <= o.r && cursor.y >= o.t && cursor.y <= o.b);
       setTint(under && isChecked(under.el) ? TINT_FULL : TINT_HALF);
-      // Con el cursor quieto se deja de animar
+      // Con el cursor quieto y la lente asentada se deja de animar; vuelve a arrancar al mover o al cambiar la seleccion.
       if (Math.abs(tx - pos.x) < 0.2 && Math.abs(ty - pos.y) < 0.2) return;
       poke(200);
       raf = requestAnimationFrame(followTick);
@@ -166,7 +134,7 @@
     function update() {
       geo = null;
       const selected = options().find(isChecked) || null;
-      if (cursor) {  // siguiendo al cursor
+      if (cursor) {   // siguiendo al cursor: followTick manda; solo se refresca el tinte
         if (!raf) { last = performance.now(); raf = requestAnimationFrame(followTick); }
         return;
       }
@@ -205,7 +173,7 @@
       animation?.cancel();
       poke(TRAVEL_MS + 200);
       lensEl.style.transform = to;
-      // La lente se estira hasta el destino y luego se recoge
+      // Estilo WhatsApp: la lente se estira hasta abarcar origen y destino y luego se recoge en el destino.
       const left = Math.min(from.m41, x);
       const top = Math.min(from.m42, y);
       const spanW = Math.max(from.m41 + w0, x + w1) - left;
@@ -225,7 +193,8 @@
       );
     }
 
-    // Un roce no mueve la lente; el cursor debe quedarse un instante
+    // Intencion de hover: un roce o el hueco entre dos opciones no reinicia el viaje de la lente; solo cuenta
+    // el cursor que se queda un instante. Evita arrancar y cancelar animaciones (y capturas de estado) en cadena.
     const HOVER_INTENT_MS = 55;
     let intent = 0;
     function hoverTo(option) {
@@ -250,7 +219,7 @@
     return { attach(instance) { lens = instance; lens.setTint?.(tint); }, update };
   }
 
-  // ---- Una lente fija por pastilla ----
+  // ---- B) Una lente fija por pastilla ----
   function createChipLenses(chips) {
     let hovered = null;
     const lenses = new Map();
@@ -273,59 +242,16 @@
     return { attach(instances) { for (const lens of instances) lenses.set(lens.el, lens); update(); } };
   }
 
-  // ---- Captura de la página ----
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  async function snapshotReady() {
-    const started = performance.now();
-    while (!window.__liquidGLRenderer__?.hasTexture && performance.now() - started < 5000) await sleep(50);
-  }
-  let recapturing = null;  // captura en curso
-  function recapture() {
-    const renderer = window.__liquidGLRenderer__;
-    if (!renderer?.captureSnapshot) return Promise.resolve();
-    if (recapturing) return recapturing;
-    recapturing = (async () => {
-      root.classList.add('snap-ready');
-      await nextFrame();
-      try {
-        await renderer.captureSnapshot.call(renderer, RAW);
-      } finally {
-        root.classList.remove('snap-ready');
-        recapturing = null;
-      }
-    })();
-    return recapturing;
-  }
-  // Todas las peticiones de captura se juntan en una sola
-  const RAW = Symbol('raw');
-  let recaptureTimer = 0;
-  function scheduleRecapture(delay = 400) {
-    clearTimeout(recaptureTimer);
-    recaptureTimer = setTimeout(() => {
-      if ('requestIdleCallback' in window) requestIdleCallback(recapture, { timeout: 2000 });
-      else recapture();
-    }, delay);
-  }
-  function coalesceSnapshots() {
-    const renderer = window.__liquidGLRenderer__;
-    if (!renderer?.captureSnapshot || renderer.__coalesced) return;
-    renderer.__coalesced = true;
-    const capture = renderer.captureSnapshot;
-    renderer.captureSnapshot = function captureSnapshot(flag) {
-      if (flag === RAW) return capture.call(this);
-      scheduleRecapture();
-      return Promise.resolve(true);
-    };
-  }
-
   const hasGpu = () => {
     if ('gpu' in navigator) return true;
     const probe = document.createElement('canvas');
     return Boolean(probe.getContext('webgl2') || probe.getContext('webgl'));
   };
 
-  async function start() {
-    if (typeof window.liquidGL !== 'function' || !hasGpu()) { root.classList.add('no-glass'); return; }
+  function start() {
+    const glass = window.SplitterGlass;
+    if (!glass?.supported || !hasGpu()) { root.classList.add('no-glass'); return; }
 
     const modeGrid = form.querySelector('.mode-grid');
     const qualityBox = document.getElementById('quality-options');
@@ -341,8 +267,10 @@
       parent.append(el);
       return el;
     };
-    const modes = createTravelingLens(modeGrid, '.mode-card', makeLens('lente-modos', modeGrid), { follow: true });
-    const quality = createTravelingLens(qualityBox, '.quality-pill', makeLens('lente-calidad', qualityBox), { follow: true });
+    const modesEl = makeLens('lente-modos', modeGrid);
+    const qualityEl = makeLens('lente-calidad', qualityBox);
+    const modes = createTravelingLens(modeGrid, '.mode-card', modesEl, { follow: true });
+    const quality = createTravelingLens(qualityBox, '.quality-pill', qualityEl, { follow: true });
     for (const chip of chips) {
       const el = document.createElement('span');
       el.className = 'lente-pastilla';
@@ -351,51 +279,26 @@
       chip.prepend(el);
     }
     const downloads = createChipLenses(chips);
-    // Las opciones no entran en la captura
-    for (const option of form.querySelectorAll('.mode-card, .quality-pill, .track-chip')) option.setAttribute('data-liquid-ignore', '');
-
-    root.classList.add('snap-ready');
-    await nextFrame();
-    const heightAtCapture = document.documentElement.scrollHeight;
-    try {
-      modes.attach(window.liquidGL({ ...OPTIONS, target: '#lente-modos' }));
-      quality.attach(window.liquidGL({ ...SMALL, target: '#lente-calidad' }));
-      const instances = window.liquidGL({ ...SMALL, target: '.lente-pastilla' });
-      downloads.attach([].concat(instances));
-      await snapshotReady();
-    } catch (error) {
-      root.classList.add('no-glass');
-    } finally {
-      root.classList.remove('snap-ready');
+    // glass-gl.js lee la caja de cada lente en cada cuadro: no hay captura ni textura que pueda quedar desfasada.
+    modes.attach(glass.add(modesEl, 'gem'));
+    quality.attach(glass.add(qualityEl, 'small'));
+    downloads.attach([...document.querySelectorAll('.lente-pastilla')].map((el) => glass.add(el, 'chip')));
+    // C) Recuadro de subir audio: una lente fija del tamano del recuadro (vidrio grande, preset panel).
+    const dropzone = document.getElementById('dropzone');
+    if (dropzone) {
+      const el = document.createElement('span');
+      el.className = 'lente-pastilla lente-panel';
+      el.setAttribute('aria-hidden', 'true');
+      dropzone.prepend(el);
+      glass.add(el, 'panel');
+      dropzone.classList.add('has-glass');
     }
-    throttleIdleRendering();
-    coalesceSnapshots();
-    // Al cambiar de modo cambia la altura: se ocultan las lentes de abajo y se recaptura
-    let capturedHeight = heightAtCapture;
-    if (document.documentElement.scrollHeight !== capturedHeight) {
-      capturedHeight = document.documentElement.scrollHeight;
-      root.classList.add('glass-stale');
-      recapture().finally(() => root.classList.remove('glass-stale'));
-    }
-    form.addEventListener('change', (event) => {
-      if (event.target.name !== 'mode') return;
-      root.classList.add('glass-stale');
-      setTimeout(async () => {
-        const height = document.documentElement.scrollHeight;
-        try {
-          if (height !== capturedHeight) {
-            capturedHeight = height;
-            clearTimeout(recaptureTimer);
-            await recapture();
-          }
-        } finally {
-          root.classList.remove('glass-stale');
-        }
-      }, 600);
-    });
   }
 
-  // Arranca después de cargar la página y la fuente
+  // Arranque fuera del camino critico: tras load, con Satoshi ya cargada (las cajas de las opciones ya tienen
+  // su tamano final) y cuando el navegador queda libre, para no competir con la entrada del h1 ni con el primer
+  // pintado. Las lentes estan bajo el hero, asi que no se ve el retraso; si el usuario baja antes, arranca en
+  // cuanto las opciones se acercan.
   let booted = false;
   function boot() {
     if (booted) return;

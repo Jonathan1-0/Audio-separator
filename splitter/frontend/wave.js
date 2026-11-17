@@ -1,4 +1,5 @@
-// Franja de barras animadas al pie de la portada.
+// Franja de barras al pie del hero: una sola fila monocroma que sube y baja en su sitio, en bucle.
+// Sin requestAnimationFrame propio: corre en el bucle unico (smoke.js); no dibuja fuera de pantalla y continua donde iba al volver.
 (() => {
   'use strict';
   const canvas = document.getElementById('wave-canvas');
@@ -6,16 +7,16 @@
   const ctx = canvas.getContext('2d');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-  const PITCH = 9;  // separación entre barras
-  const BAR = PITCH * 0.61;  // ancho de cada barra
-  const PERIOD = 4;  // segundos por ciclo
-  const AMPLITUDE = 0.3;  // cuánto cambia la altura
+  const PITCH = 9;                 // separacion entre barras (px)
+  const BAR = PITCH * 0.61;        // misma proporcion barra/hueco que el simbolo del logo (11:7)
+  const PERIOD = 4;                // segundos por oscilacion completa
+  const AMPLITUDE = 0.3;           // variacion de altura alrededor de la altura base
   const LEVEL_MIN = 0.14;
   const LEVEL_MAX = 0.95;
   const ALPHA_MIN = 0.25;
   const ALPHA_MAX = 0.7;
-  const FPS = 30;
-  const ALPHA_STEPS = 6;  // niveles de opacidad
+  const FPS = 30;                  // el movimiento es lento (4 s por ciclo): 30 fps se ven igual y cuestan la mitad
+  const ALPHA_STEPS = 6;           // las barras se agrupan por opacidad: 6 trazos por cuadro en vez de uno por barra
 
   const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
   const color = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
@@ -28,7 +29,7 @@
   let phase = new Float32Array(0);
   let needsResize = true;
 
-  // Cada barra tiene su altura y su fase
+  // Alturas base variadas y fase propia por barra: indice * (2π / total) mas una variacion pequena.
   function build() {
     let seed = 11;
     const random = () => {
@@ -67,7 +68,7 @@
     ctx.lineWidth = BAR;
     const cy = height / 2;
     const w = (Math.PI * 2 * seconds) / PERIOD;
-    // Un trazo por nivel de opacidad
+    // Un solo trazo por nivel de opacidad (en vez de uno por barra): menos llamadas y menos cambios de estado.
     for (let step = 0; step < ALPHA_STEPS; step++) {
       ctx.globalAlpha = ALPHA_MIN + (ALPHA_MAX - ALPHA_MIN) * (step / (ALPHA_STEPS - 1));
       ctx.beginPath();
@@ -84,7 +85,7 @@
     }
   }
 
-  // Usa el bucle de smoke.js
+  // ---- Bucle: se suscribe al bucle unico (smoke.js); el tiempo solo avanza mientras dibuja ----
   let elapsed = 0;
   let inView = true;
   let running = false;
@@ -93,7 +94,8 @@
     elapsed += dt;
     draw(elapsed);
   }
-  // Solo se dibuja mientras se ve
+  // Solo esta suscrito al bucle mientras se ve: con la franja fuera de pantalla no queda ningun
+  // requestAnimationFrame en la pagina (el humo vive en su Worker).
   function sync() {
     const should = inView && !reduced.matches && !document.hidden;
     if (should && !running) { window.SplitterLoop.add(step, FPS); running = true; }

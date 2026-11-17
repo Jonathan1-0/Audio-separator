@@ -1,15 +1,18 @@
-// Animación de entrada del logo y el título.
+// Entrada de la pagina: barras del logo y h1. Si este modulo no carga, la pagina se ve completa.
 import { animate, stagger } from 'https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm';
 
 const EASE = [0.22, 1, 0.36, 1];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const bars = [...document.querySelectorAll('.brand-bars rect')];
+// Tras la entrada, las barras del logo de la barra suben y bajan despacio sin parar (styles.css, .is-alive).
+const logo = document.querySelector('.site-header .brand-bars');
+const alive = () => logo?.classList.add('is-alive');
 const title = document.getElementById('page-title');
 
 function enterBars() {
   for (const bar of bars) Object.assign(bar.style, { opacity: '0', transform: 'translateY(40px)' });
   animate(bars, { opacity: [0, 1], y: [40, 0] }, { duration: 0.2, ease: EASE, delay: stagger(0.025) })
-    .finished.then(() => bars.forEach((bar) => bar.removeAttribute('style')));
+    .finished.then(() => { bars.forEach((bar) => bar.removeAttribute('style')); alive(); });
 }
 
 function enterTitle() {
@@ -28,20 +31,20 @@ function enterTitle() {
     return index ? [' ', wrap] : [wrap];
   }));
   const letters = [...title.querySelectorAll('[style*="blur"]')];
-  // Orden aleatorio de las letras
+  // Orden aleatorio (Fisher-Yates): rango de llegada de cada letra.
   const order = letters.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
   const duration = 0.2;
-  const step = (0.4 - duration) / Math.max(letters.length - 1, 1);
+  const step = (0.4 - duration) / Math.max(letters.length - 1, 1); // 100ms -> 500ms
   const done = letters.map((letter, i) => animate(
     letter,
     { opacity: [0, 1], filter: ['blur(10px)', 'blur(0px)'] },
     { duration, ease: EASE, delay: 0.1 + order[i] * step },
   ).finished);
-  // Un cuadro después se limpian los estilos
+  // Un frame despues, para que Motion termine de fijar el estado final antes de limpiarlo.
   Promise.all(done).then(() => requestAnimationFrame(() => letters.forEach((letter) => {
     for (const prop of ['will-change', 'opacity', 'filter']) letter.style.removeProperty(prop);
   })));
@@ -51,7 +54,8 @@ function setupLogoHover() {
   const brand = document.querySelector('.brand');
   let running = false;
   brand.addEventListener('pointerenter', (event) => {
-    if (running || reduced.matches || event.pointerType === 'touch') return;
+    // Con el logo ya en movimiento continuo, el temblor chocaria con esa animacion: no se lanza.
+    if (running || reduced.matches || event.pointerType === 'touch' || logo?.classList.contains('is-alive')) return;
     running = true;
     const wobble = bars.map((bar, i) => animate(
       bar,
@@ -67,5 +71,5 @@ if (bars.length && title) {
   if (!reduced.matches) {
     enterBars();
     enterTitle();
-  }
+  } else alive();   // con reducir movimiento la regla global deja las barras quietas
 }

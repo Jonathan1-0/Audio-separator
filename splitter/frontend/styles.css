@@ -1,4 +1,3 @@
-/* Estilos de la página */
 :root {
   color-scheme: dark;
   --bg: #0A0A0A;
@@ -34,6 +33,12 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { scroll-padding-top: 88px; scroll-behavior: smooth; }
+/* Recarga con un trabajo abierto: se muestra su panel (data-restore) desde el primer pintado, con las pistas
+   guardadas ya dibujadas (final de index.html); index.js lo llena y quita .is-restoring. Nada se oculta. */
+html.is-restoring #splitter-form { display: none !important; }
+html[data-restore="results"] #results-panel[hidden], html[data-restore="job"] #job-panel[hidden] { display: block !important; }
+/* Pista dibujada antes de tener datos (al recargar): la pastilla al final, como un volumen al 100%. */
+.glass-range-ghost .glass-range-thumb { left: auto; right: 0; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.5 var(--font-body); letter-spacing: 0; word-spacing: normal; -webkit-font-smoothing: antialiased; }
 button, input { font: inherit; }
 button, a, label { -webkit-tap-highlight-color: transparent; }
@@ -79,6 +84,8 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .field input { width: 100%; min-height: 52px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); color: var(--text); font-size: 17px; }
 :is(.field input, input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"]):focus-visible { outline: 2px solid transparent; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .login-message { margin: 0; color: var(--text); font-size: 15px; }
+.login-message.is-ok { color: var(--text-2); padding-left: 12px; border-left: 2px solid var(--accent); }
+.field-hint { margin: 0; color: var(--text-2); font-size: 13px; font-weight: 400; line-height: 1.4; }
 .login-submit { width: 100%; margin-top: 4px; }
 .login-fields { display: flex; flex-direction: column; gap: 20px; }
 .link-button { padding: 0; border: 0; background: none; color: var(--accent); font-size: inherit; }
@@ -87,7 +94,7 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .social-auth { display: flex; flex-direction: column; gap: 16px; }
 .social-divider { display: flex; align-items: center; gap: 16px; margin: 0; color: var(--text-2); font-size: 14px; }
 .social-divider::before, .social-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.social-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.social-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .social-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font-size: 15px; font-weight: 500; }
 .social-button:hover { background: var(--panel-hover); }
 .social-button svg { flex-shrink: 0; }
@@ -97,22 +104,22 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .primary-button:disabled { background: var(--bg-2); color: var(--text-2); cursor: not-allowed; }
 .nav-cta { min-height: 40px; padding: 8px 20px; font-size: 14px; }
 .workspace { position: relative; padding-top: 72px; overflow-x: clip; }
-/* Humo de fondo */
+/* Humo de fondo: canvas fijo al fondo (z-index -2). El vidrio (glass-gl.js, #glass-canvas, z-index -1) va encima
+   del humo y debajo del contenido; no captura nada: recalcula el humo y la luz en la posicion refractada. */
 .smoke-canvas { position: fixed; inset: 0; z-index: -2; display: block; width: 100%; height: 100%; pointer-events: none; }
-/* Luz detrás de las opciones (lo que refracta el vidrio) */
 .mode-step, .tracks-step { position: relative; }
-/* Luz diagonal sobre las tarjetas */
-.light { position: absolute; inset: -140px -40px -60px; z-index: -1; pointer-events: none; background: url("light.svg") center / 100% 100% no-repeat; will-change: transform; animation: light-drift 10s ease-in-out infinite alternate; }
+/* Luz fria diagonal sobre las tarjetas: el vidrio la refracta leyendo light.svg y la caja de .light. */
+.light { position: absolute; top: 0; right: -40px; left: -40px; height: 1600px; max-height: 100%; z-index: -1; pointer-events: none; background: url("light.svg") center / 100% 100% no-repeat; will-change: transform; animation: light-drift 10s ease-in-out infinite alternate; }
 @keyframes light-drift { from { transform: translate3d(-34px, -6px, 0); } to { transform: translate3d(34px, 6px, 0); } }
 .intro { padding: var(--section-space) max(24px, calc((100% - 1216px) / 2)); scroll-margin-top: 88px; }
-/* Los tres pasos del formulario */
+/* Un solo bloque compacto bajo el hero: las tres secciones (.step) comparten una rejilla con separaciones chicas. */
 .flow-block { padding: 8px max(24px, calc((100% - 1216px) / 2)) 56px; scroll-margin-top: 88px; }
 .step { scroll-margin-top: 88px; }
 .studio-flow { display: grid; grid-template-columns: minmax(0, 1fr); }
-/* Paso 01 */
+/* Bloque A (01) respira con padding propio; el hueco hacia el bloque B (02 + 03) es solo espacio: sin lineas ni cambio de fondo. */
 .mode-step { grid-column: 1 / -1; padding-top: clamp(48px, 6vw, 88px); padding-bottom: clamp(80px, 10vw, 150px); }
 .mode-step h2 { font-size: clamp(30px, 3.6vw, 46px); }
-/* Pasos 02 y 03 */
+/* Bloque B (02 + 03): una sola columna, centrada, con aire entre eyebrow, titulo, contenido y entre pasos. */
 .upload-step, .tracks-step { text-align: center; }
 .upload-step { margin-bottom: clamp(56px, 7vw, 96px); }
 .upload-step .step-heading, .tracks-step .step-heading { margin: 0 auto clamp(28px, 3.5vw, 44px); }
@@ -136,24 +143,21 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .mode-step .step-heading { margin-bottom: 32px; }
 .mode-grid { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .mode-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 36px 32px; border-radius: 32px; outline: 2px solid transparent; outline-offset: 3px; }
-/* Opciones del formulario */
+/* Opciones elegibles: sin marcar, transparentes con borde; marcadas, el vidrio (glass.js) y texto mas claro. */
 :is(.mode-card, .quality-pill, .track-chip) { border: 1px solid var(--line); background: transparent; color: var(--text-2); }
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { border-color: var(--line-strong); color: var(--text); }
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) :is(.mode-description, .mode-caption) { color: var(--text); }
 .no-glass :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { background: var(--bg-2); }
-/* Lentes de vidrio (glass.js) */
-
-:is(.mode-card, .quality-pill, .track-chip) { transition: none; }
+/* Con vidrio, su borde lo dibuja el shader: el borde CSS de la opcion marcada se oculta para no verse doble. */
+:root:not(.no-glass) :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { border-color: transparent; }
+/* Lentes (glass.js): elementos vacios y sin eventos; glass-gl.js lee su caja y dibuja el vidrio en #glass-canvas. */
+/* Elegir una opcion se nota al instante: sin fundido de color en la etiqueta. */
+:is(.mode-card, .quality-pill, .track-chip) { transition: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }   /* son botones: su texto no se selecciona */
 .lente, .lente-pastilla { position: absolute; z-index: 1; pointer-events: none; }
 .lente { top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
-/* Lentes ocultas mientras se recaptura */
-.glass-stale :is(#lente-calidad, .lente-pastilla) { display: none !important; }
 #lente-modos { border-radius: 32px; }
 #lente-calidad { border-radius: 30px; }
-.lente-pastilla { inset: 0; border-radius: inherit; }
-/* Durante la captura todo cuenta como visible */
-.snap-ready :is(.step, .flow-block) { opacity: 1 !important; transform: none !important; transition: none !important; }
-.mode-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 7px; }
+.lente-pastilla { inset: 0; border-radius: inherit; }.mode-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 7px; }
 .mini-spectrum { display: flex; gap: 4px; height: 88px; align-items: center; margin-bottom: 28px; }
 .mini-spectrum .stem-group { gap: 3px; }
 .mini-spectrum[data-tone="ash"] .wave-bar { background: var(--wave-ash); }
@@ -168,6 +172,8 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .quality-pill strong { font-size: 20px; font-weight: 500; }
 .quality-pill small { display: block; max-width: 28ch; margin-top: 6px; font-size: 15px; line-height: 1.4; }
 .dropzone { position: relative; display: grid; place-items: center; width: min(100%, 860px); min-height: clamp(200px, 22vw, 260px); margin-inline: auto; padding: clamp(32px, 4vw, 52px) clamp(20px, 4vw, 48px); border: 1px dashed var(--line); border-radius: 28px; text-align: center; }
+/* Con vidrio (glass.js), el borde punteado lo sustituye el canto del vidrio; al arrastrar vuelve el borde azul. */
+.dropzone.has-glass { border-color: transparent; }
 .dropzone.is-dragover { border-color: var(--accent); }
 .upload-prompt > p:first-child { margin: 0; font-size: clamp(20px, 2.2vw, 26px); font-weight: 500; line-height: 1.25; letter-spacing: -.01em; text-wrap: balance; }
 .file-picker { color: var(--accent); display: inline; }
@@ -188,7 +194,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .action-row { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 20px; }
 #tracks-section:not([hidden]) + .action-row { margin-top: clamp(32px, 4vw, 44px); }
 .action-hint { max-width: 40ch; margin: 0; color: var(--text-2); font-size: 15px; }
-/* Perfil y su menú */
+/* Perfil: circulo al final de la barra, con menu desplegable alineado a la derecha. */
 .profile { position: relative; }
 .profile-button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--bg-2); color: var(--text); font-size: 15px; font-weight: 600; line-height: 1; }
 .profile-button:hover, .profile-button[aria-expanded="true"] { background: var(--panel-hover); }
@@ -202,7 +208,64 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .menu-item:hover { background: var(--panel-hover); }
 .menu-item:focus-visible { outline-offset: -2px; }
 .menu-mobile { display: none; }
-/* Planes */
+.menu-item { gap: 14px; }
+.menu-icon { flex: none; color: var(--text-2); }
+.menu-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.plan-pill { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 16px; border-radius: 999px; background: var(--accent-fill); color: var(--text-on-accent) !important; font-size: 14px; font-weight: 500; }
+.plan-state { display: inline-flex; align-items: center; gap: 8px; }
+.plan-state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
+.plan-state[data-activo="true"]::before { background: var(--accent); }
+.menu-user .menu-usage { margin-top: 8px; white-space: normal; }
+/* Avatar: foto o inicial dentro del circulo de la barra. */
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.profile-button { overflow: hidden; }
+/* Ventana de Perfil y edicion de un dato */
+.wall.profile-dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; overflow-y: auto; text-align: left; }
+.profile-view { display: block; min-height: min(560px, calc(100dvh - 64px)); padding: 20px 24px 28px; }
+.profile-view[hidden] { display: none; }
+.profile-bar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.text-button { min-height: 44px; padding: 8px 4px; border: 0; background: none; color: var(--text); font-size: 17px; font-weight: 500; }
+.text-button:hover { color: var(--text-2); }
+.text-button-accent { color: var(--accent); }
+.text-button-accent:hover { color: var(--text); }
+.text-button:disabled { color: var(--text-2); cursor: progress; }
+.wall .profile-title { margin: 12px 0 20px; font-size: clamp(30px, 6vw, 38px); font-weight: 600; letter-spacing: -.02em; }
+.profile-photo { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 20px; }
+.profile-avatar { position: relative; display: grid; place-items: center; width: 112px; height: 112px; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--bg); color: var(--text); font-size: 44px; font-weight: 600; }
+.profile-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.profile-avatar img[hidden], .profile-avatar span[hidden] { display: none; }
+.avatar-camera { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 3px solid var(--bg-2); border-radius: 50%; background: var(--accent-fill); color: var(--text-on-accent); }
+.avatar-camera:hover { background: var(--accent); }
+.wall .profile-message { margin: 0 0 16px; color: var(--text); font-size: 15px; text-align: center; }
+.profile-rows { display: grid; gap: 10px; }
+.profile-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 18px; border-radius: 16px; background: var(--bg); }
+.profile-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.profile-label { color: var(--text-2); font-size: 14px; }
+.profile-value { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-value.is-empty { color: var(--text-2); }
+.icon-button { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: var(--bg-2); color: var(--text); }
+.icon-button:hover { background: var(--panel-hover); }
+.profile-input { position: relative; }
+.profile-input input { width: 100%; min-height: 56px; padding: 12px 52px 12px 20px; border: 1px solid transparent; border-radius: 16px; background: var(--bg); color: var(--text); font-size: 19px; }
+.profile-input input[aria-invalid="true"] { border-color: var(--text-2); }
+.input-clear { position: absolute; top: 50%; right: 10px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--text-2); transform: translateY(-50%); }
+.input-clear:hover { color: var(--text); }
+.profile-input + .profile-message { margin-top: 14px; text-align: left; }
+/* Contraseña: puntos en la fila y tres campos en su vista de edicion. */
+.profile-dots { letter-spacing: .12em; }
+.profile-fields { display: grid; gap: 16px; }
+.profile-field { display: flex; flex-direction: column; gap: 8px; color: var(--text-2); font-size: 14px; }
+.profile-field input { width: 100%; min-height: 56px; padding: 12px 20px; border: 1px solid transparent; border-radius: 16px; background: var(--bg); color: var(--text); font-size: 19px; }
+.profile-field input[aria-invalid="true"] { border-color: var(--text-2); }
+label.profile-field:has(input:focus-visible) { outline: none; }
+.profile-field input:focus-visible { outline: none; box-shadow: none; border-color: rgba(255, 255, 255, 0.16); }
+.wall .profile-hint { margin: 12px 0 0; color: var(--text-2); font-size: 14px; text-align: left; }
+.profile-hint + .profile-message { margin-top: 12px; text-align: left; }
+@media (max-width: 640px) {
+  .wall.profile-dialog { width: calc(100% - 16px); }
+  .profile-view { padding: 16px 16px 24px; }
+}
+/* Seccion de planes */
 .plans { position: relative; isolation: isolate; overflow: hidden; padding: var(--section-space) max(24px, calc((100% - 1216px) / 2)); text-align: center; }
 .plans-bg { position: absolute; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; background: radial-gradient(ellipse 70% 50% at 50% 35%, color-mix(in srgb, var(--accent) 9%, var(--bg)), var(--bg) 75%); }
 .plans-bg canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 400ms var(--ease); }
@@ -231,6 +294,8 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .nav-register:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--text) 88%, var(--bg)); }
 .nav-register:active { transform: none; }
 .plans-page { min-height: 100dvh; }
+.plans-header { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; max-width: 1280px; min-height: 72px; margin-inline: auto; padding: 12px 0; }
+.plans-header .brand { grid-column: 2; }
 .back-link { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--text-2); font-size: 15px; transition: color 200ms var(--ease); }
 .back-link:hover { color: var(--text); }
 .back-link svg { transition: transform 200ms var(--ease); }
@@ -242,29 +307,72 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .wall h2 { margin: 0 0 12px; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
 .wall p { margin: 0 0 24px; color: var(--text-2); font-size: 16px; line-height: 1.5; text-wrap: pretty; }
 .wall-actions { display: grid; gap: 10px; }
-.wall-actions button { width: 100%; }
+.wall-actions button, .wall-actions a { width: 100%; }
+/* Ventana de limite de separaciones: "Volver" con flecha, discreto bajo "Ver planes". */
+.back-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; background: none; color: var(--text-2); font-size: 16px; font-weight: 500; }
+.back-button:hover { color: var(--text); }
+.back-button svg { transition: transform 200ms var(--ease); }
+.back-button:hover svg { transform: translateX(-3px); }
 .wall-close { margin-top: 12px; padding: 8px; border: 0; background: none; color: var(--text-2); font-size: 14px; }
 .wall-close:hover { color: var(--text); }
-/* Diálogos de pago, avisos y "Mis audios" */
+/* Pago de Pro, avisos y "Mis audios" (account.js): mismos dialogos que el muro. */
 .wall-form { text-align: left; }
 .wall-form .login-fields { gap: 16px; }
 .wall-form h2, .wall-form p { margin-bottom: 0; }
 .wall-form .select { width: 100%; }
 .wall .wall-note { color: var(--text-2); font-size: 14px; }
 .wall .login-message { margin: 0 0 16px; color: var(--text); }
-.wall-wide { width: min(560px, calc(100% - 32px)); text-align: left; }
-.history-list { display: grid; max-height: min(60vh, 480px); margin: 0 0 8px; padding: 0; overflow-y: auto; list-style: none; }
-.history-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-.history-item:last-child { border-bottom: 0; }
-.history-item div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.history-item strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.history-item span { color: var(--text-2); font-size: 14px; }
+.wall-form { max-height: calc(100dvh - 32px); overflow-x: hidden; overflow-y: auto; }
+.pay-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); }
+.pay-methods button { min-height: 44px; border: 0; border-radius: 12px; background: none; color: var(--text-2); font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 200ms var(--ease), color 200ms var(--ease); }
+.pay-methods button:hover { color: var(--text); }
+.pay-methods button[aria-checked="true"] { background: var(--bg-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.pay-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pay-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pay-label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pay-brand { color: var(--text-2); font-size: 12px; font-style: normal; font-weight: 400; }
+.wall .pay-error { margin: 0; padding-left: 12px; border-left: 2px solid var(--accent); color: var(--text); font-size: 13px; line-height: 1.4; }
+.pay-field input[aria-invalid="true"] { border-color: var(--accent); }
+@media (max-width: 420px) { .pay-row { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .pay-methods button { transition: none; } }
+.wall-wide { width: min(820px, calc(100% - 32px)); text-align: left; }
+/* Mis audios: la ventana no se desplaza; solo la lista, con su barra fina y separada de las fichas. */
+.wall-wide[open] { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); overflow: hidden; }
+.wall-wide .history-list { flex: 1 1 auto; min-height: 0; max-height: none; margin-right: -8px; padding: 2px 20px 2px 2px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.wall-wide .wall-close { align-self: flex-start; flex: none; }
+.wall-wide .history-list::-webkit-scrollbar { width: 6px; }
+.wall-wide .history-list::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--line); }
+.wall-wide .history-list::-webkit-scrollbar-track { background: transparent; }
+.history-list { display: grid; max-height: min(70vh, 640px); margin: 0 0 8px; padding: 0; overflow-y: auto; list-style: none; }
+/* Mis audios: una ficha por audio (icono de onda, nombre, etiquetas, pistas y fechas) con Abrir y borrar. */
+.history-list { gap: 16px; padding: 2px; }
+.history-item { display: flex; align-items: center; gap: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 24px; }
+.history-icon { display: grid; place-items: center; flex: none; width: 72px; height: 72px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); color: var(--text); }
+.history-info { display: flex; flex-direction: column; flex: 1 1 0; gap: 10px; min-width: 0; }
+.history-item strong { overflow: hidden; font-size: 18px; font-weight: 500; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.history-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.history-tag { padding: 3px 12px; border-radius: 999px; background: var(--bg); color: var(--text); font-size: 13px; font-weight: 400; }
+.history-dot { color: var(--text-2); font-style: normal; }
+.history-item .history-stems { color: var(--text-2); font-size: 14px; }
+.history-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--text-2); font-size: 13px; }
+.history-meta em { display: inline-flex; align-items: center; gap: 6px; font-style: normal; }
+@media (min-width: 900px) { .history-meta em + em::before { content: ''; align-self: stretch; width: 1px; margin-right: 8px; background: var(--line); } }   /* la barrita solo cuando caben en una linea */
+.history-meta svg { width: 16px; height: 16px; flex: none; }
 .history-item .secondary-button { flex: none; }
+.history-delete { display: grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--accent); cursor: pointer; transition: background-color 200ms var(--ease); }
+.history-delete:hover { background: var(--bg); }
+.history-delete svg { width: 22px; height: 22px; }
+@media (max-width: 560px) {
+  .history-item { flex-wrap: wrap; gap: 14px; padding: 16px; }
+  .history-icon { width: 56px; height: 56px; }
+  .history-info { flex-basis: calc(100% - 80px); }
+}
 .history-empty { padding: 14px 0; color: var(--text-2); }
 .quality-pill:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .workspace-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 32px max(24px, calc((100% - 1216px) / 2)); border-top: 1px solid var(--line); color: var(--text-2); font-size: 14px; }
 .footer-label { font-size: 14px; }
-.panel { max-width: 820px; margin: 0 auto; padding: 32px; border: 1px solid var(--line); border-radius: 28px; background: var(--bg-2); }
+/* Paneles de progreso y resultados: aparecen justo bajo las ondas del hero; un poco de aire para que no queden pegados. */
+.panel { max-width: 820px; margin: clamp(32px, 4vw, 56px) auto 0; padding: 32px; border: 1px solid var(--line); border-radius: 28px; background: var(--bg-2); }
 .panel .eyebrow { margin-bottom: 12px; }
 .panel-title { margin-bottom: 20px; }
 .panel-note { margin: 16px 0 0; color: var(--text-2); font-size: 15px; }
@@ -278,7 +386,8 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .secondary-button { min-height: 44px; padding: 10px 22px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font-size: 16px; font-weight: 500; }
 .secondary-button:not(:disabled):hover { background: var(--panel-hover); }
 .secondary-button:disabled, .secondary-button[aria-disabled="true"] { color: var(--text-2); cursor: progress; }
-.player { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-radius: 20px; background: var(--bg); }
+.player { display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 8px; border-radius: 999px; background: var(--bg); }
+.player .play-button { width: 40px; height: 40px; }
 .play-button { display: grid; place-items: center; flex-shrink: 0; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; background: var(--accent-fill); color: var(--text-on-accent); }
 .play-button:disabled { background: var(--line); color: var(--text-2); cursor: progress; }
 .play-button svg { display: block; }
@@ -294,10 +403,55 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .track-list { display: grid; margin: 12px 0 0; padding: 0; list-style: none; }
 .track-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(0, 1.6fr) 4ch auto; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .track-row:last-child { border-bottom: 0; }
+/* Volumen de cada pista: deslizador con pastilla de vidrio liquido (index.js, glassRange). El input nativo va encima,
+   invisible, con el pulgar del mismo tamano que la pastilla para que el reparto del recorrido coincida. Lo visible
+   solo se mueve con transform; el vidrio (backdrop-filter + lente #glass-range-edge, que solo curva el canto) solo existe mientras se arrastra (.is-active). */
+.glass-range { --thumb-w: 34px; --thumb-h: 22px; position: relative; min-width: 0; height: 32px; }
+.glass-range-track { position: absolute; top: 50%; left: 0; right: 0; height: 8px; margin-top: -4px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.glass-range-fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(117deg, var(--accent) 0%, var(--accent-fill) 100%); transform: translate3d(0, 0, 0); will-change: transform; }
+.glass-range-thumb { position: absolute; top: 50%; left: 0; z-index: 2; width: var(--thumb-w); height: var(--thumb-h); pointer-events: none; transform: translate3d(0, -50%, 0); will-change: transform; }
+.glass-range-knob { position: absolute; inset: 0; overflow: hidden; border-radius: 999px; background-color: var(--text); transition: transform 200ms var(--ease), background-color 200ms var(--ease); }
+.glass-range-lens, .glass-range-tint, .glass-range-shine { position: absolute; inset: 0; border-radius: inherit; opacity: 0; transition: opacity 200ms var(--ease); }
+.glass-range.is-active .glass-range-knob { background-color: color-mix(in srgb, var(--text) 7%, transparent); transform: scale(1.55, 1.45); box-shadow: 0 10px 24px color-mix(in srgb, var(--bg) 70%, transparent); }
+.glass-range.is-active .glass-range-lens { opacity: 1; -webkit-backdrop-filter: url(#glass-range-edge) blur(.3px) saturate(1.1); backdrop-filter: url(#glass-range-edge) blur(.3px) saturate(1.1); }
+/* Reflejo: el cielo se refleja arriba y el canto de abajo devuelve un poco de luz. */
+.glass-range.is-active .glass-range-tint { opacity: 1; background: linear-gradient(to bottom, color-mix(in srgb, var(--text) 18%, transparent), transparent 42%), radial-gradient(60% 40% at 50% 0%, color-mix(in srgb, var(--text) 14%, transparent), transparent 100%); }
+.glass-range.is-active .glass-range-shine { opacity: 1; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 24%, transparent), inset 0 1px 1px color-mix(in srgb, var(--text) 45%, transparent), inset 0 -1px 1px color-mix(in srgb, var(--text) 22%, transparent); }
+.glass-range-input { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; appearance: none; background: transparent; }
+.glass-range-input::-webkit-slider-runnable-track { height: var(--thumb-h); background: transparent; }
+.glass-range-input::-webkit-slider-thumb { width: var(--thumb-w); height: var(--thumb-h); appearance: none; border: 0; }
+.glass-range-input::-moz-range-track { height: var(--thumb-h); background: transparent; }
+.glass-range-input::-moz-range-thumb { width: var(--thumb-w); height: var(--thumb-h); border: 0; border-radius: 999px; }
+.glass-range:has(.glass-range-input:focus-visible) .glass-range-knob { outline: 2px solid var(--accent); outline-offset: 3px; }
+.glass-range:has(.glass-range-input:disabled) { opacity: .5; }
+/* Barra de reproduccion (#seek) con la misma pastilla: ocupa el hueco del reproductor y, mientras suena, la pastilla
+   y el relleno se deslizan entre las actualizaciones (250 ms, lineal) para avanzar sin saltos. Al arrastrar, sin retardo. */
+.glass-range-seek { flex: 1; --thumb-w: 14px; --thumb-h: 14px; }
+/* Progreso de la reproduccion: azul con toque de vidrio liquido (brillo arriba, canto claro, base mas profunda). */
+.glass-range-seek .glass-range-fill { background: linear-gradient(to bottom, color-mix(in srgb, var(--text) 42%, transparent) 0%, color-mix(in srgb, var(--text) 8%, transparent) 45%, transparent 60%), linear-gradient(117deg, color-mix(in srgb, var(--accent) 88%, transparent) 0%, color-mix(in srgb, var(--accent-fill) 72%, transparent) 100%); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 55%, transparent), inset 0 -1px 1px color-mix(in srgb, var(--bg) 40%, transparent), inset -2px 0 3px color-mix(in srgb, var(--text) 30%, transparent); }
+/* La pastilla de la barra de reproduccion es un circulo (14x14) con el mismo vidrio. */
+.glass-range-seek.is-active .glass-range-knob { transform: scale(1.3); }
+.glass-range-seek.is-active .glass-range-lens { -webkit-backdrop-filter: url(#glass-range-circle) blur(.3px) saturate(1.1); backdrop-filter: url(#glass-range-circle) blur(.3px) saturate(1.1); }
+.glass-range-seek.is-playing:not(.is-active) :is(.glass-range-thumb, .glass-range-fill) { transition: transform 250ms linear; }
 .track-row strong { font-size: 17px; font-weight: 500; }
 .track-vol { color: var(--text-2); font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
 .download-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; margin-top: 24px; }
 .format-label { color: var(--text-2); font-size: 15px; }
+/* Desplegable del formato (index.js, buildFormatPicker): boton con flecha y lista propia; el <select> queda oculto. */
+.format-picker { position: relative; }
+.format-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 50px; padding: 10px 16px 10px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); color: var(--text); font-size: 17px; text-align: left; }
+.format-button:hover { background: var(--panel-hover); }
+.format-button:focus-visible { outline: 2px solid transparent; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.format-chevron { flex: none; color: var(--text-2); transition: transform 200ms var(--ease); }
+.format-button[aria-expanded="true"] .format-chevron { transform: rotate(180deg); }
+.format-list { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; display: grid; gap: 2px; min-width: 100%; width: max-content; max-width: min(360px, calc(100vw - 32px)); margin: 0; padding: 6px; list-style: none; border: 1px solid var(--line); border-radius: 16px; background: var(--bg); animation: menu-in 200ms var(--ease); }
+.format-list:focus { outline: none; }
+.format-list:focus-visible .format-option.is-active { outline: 2px solid var(--accent); outline-offset: -2px; }
+.format-option { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: 10px; color: var(--text); font-size: 17px; cursor: pointer; }
+.format-option.is-active { background: var(--panel-hover); }
+.format-badge { padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text-2); font-size: 13px; font-weight: 500; }
+.format-check { flex: none; margin-left: auto; color: var(--accent); visibility: hidden; }
+.format-option[aria-selected="true"] .format-check { visibility: visible; }
 .select { min-height: 50px; padding: 10px 40px 10px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23A1A1A6' stroke-width='1.6'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 16px center; color: var(--text); font-size: 16px; appearance: none; cursor: pointer; }
 .select:focus-visible { outline: 2px solid transparent; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .results-panel > .secondary-button { margin-top: 24px; }
@@ -305,68 +459,6 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .reveal-pending { opacity: 0; transform: translateY(16px); }
 .reveal-ready { transition: opacity 500ms ease, transform 500ms ease; }
 .reveal-ready.is-visible, .reveal-ready:focus-within { opacity: 1; transform: none; }
-/* Encabezado */
-.plans-page .plans { padding-top: 72px; }
-.nav-help:hover { color: var(--accent); }
-.nav-planes[aria-current="page"] { color: var(--text); text-decoration: underline; text-underline-offset: 6px; }
-a.nav-register { display: inline-flex; align-items: center; }
-
-/* Íconos de vidrio */
-:root {
-  --glass-fill: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.05) 48%, rgba(255,255,255,.1));
-  --glass-line: rgba(255,255,255,.24);
-  --glass-shadow: inset 0 1px 0 rgba(255,255,255,.38), inset 0 -1px 0 rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.4);
-}
-.profile-button, .dialog-close, .remove-file, .social-button, .tip-button, .menu-icon, .faq-mark, .play-button {
-  border: 1px solid var(--glass-line);
-  background: var(--glass-fill);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
-}
-:is(.profile-button, .dialog-close, .remove-file, .social-button, .tip-button):hover, .profile-button[aria-expanded="true"] {
-  background: linear-gradient(145deg, rgba(255,255,255,.3), rgba(255,255,255,.1) 48%, rgba(255,255,255,.16));
-}
-.play-button { background: linear-gradient(145deg, rgba(255,255,255,.34), rgba(255,255,255,0) 52%), var(--accent-fill); }
-.play-button:disabled { background: var(--glass-fill); }
-.menu-icon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-right: 12px; border-radius: 10px; color: var(--text); }
-.plan-features li { padding-left: 36px; }
-.plan-features li::before { left: 7px; top: .5em; z-index: 1; border-color: var(--text); }
-.plan-features li::after { content: ""; position: absolute; left: 0; top: .1em; width: 24px; height: 24px; border: 1px solid var(--glass-line); border-radius: 50%; background: var(--glass-fill); box-shadow: var(--glass-shadow); }
-
-/* Botones de Google y Facebook */
-.social-row { display: flex; }
-.social-row .social-button { flex: 1; }
-
-/* Resultado */
-button.back-link { padding: 0; border: 0; background: none; font-family: inherit; }
-.results-panel > .back-link { margin: -8px 0 8px; }
-.mix-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; margin-top: 16px; }
-.mix-row .panel-note { flex: 1 1 280px; margin: 0; }
-.mix-reset { min-height: 44px; padding: 8px 18px; font-size: 15px; }
-.mix-reset:disabled { cursor: default; opacity: .55; }
-
-/* Ayuda */
-.field-hint { color: var(--text-2); font-size: 13px; font-weight: 400; }
-p.field-hint { margin: -4px 0 0; }
-.file-keys { margin-top: 6px; }
-.tip { position: relative; display: inline-flex; }
-.tip-button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; color: var(--text); font-size: 16px; font-weight: 600; line-height: 1; }
-.tip-text { position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 3; width: min(280px, calc(100vw - 48px)); padding: 12px 14px; border: 1px solid var(--glass-line); border-radius: 14px; background: var(--bg-2); color: var(--text); font-size: 14px; line-height: 1.45; text-align: left; opacity: 0; visibility: hidden; transform: translateY(4px); transition: opacity 180ms ease, transform 180ms ease, visibility 180ms; }
-.tip:hover .tip-text, .tip:focus-within .tip-text { opacity: 1; visibility: visible; transform: none; }
-.help { padding: var(--section-space) max(24px, calc((100% - 820px) / 2)); border-top: 1px solid var(--line); }
-.help h2 { margin: 0 0 32px; font-size: clamp(30px, 4vw, 44px); font-weight: 600; line-height: 1.1; letter-spacing: -.02em; }
-.faq { display: grid; gap: 12px; }
-.faq-item { border: 1px solid var(--line); border-radius: 20px; background: color-mix(in srgb, var(--bg-2) 70%, transparent); }
-.faq-item summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 14px 16px 14px 24px; border-radius: 20px; font-size: 18px; font-weight: 500; list-style: none; cursor: pointer; }
-.faq-item summary::-webkit-details-marker { display: none; }
-.faq-item summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.faq-item p { margin: 0; padding: 0 24px 22px; color: var(--text-2); font-size: 16px; text-wrap: pretty; }
-.faq-mark { position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; transition: transform 250ms var(--ease); }
-.faq-mark::before, .faq-mark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 1.6px; border-radius: 2px; background: var(--text); transform: translate(-50%, -50%); }
-.faq-mark::after { transform: translate(-50%, -50%) rotate(90deg); }
-.faq-item[open] .faq-mark { transform: rotate(45deg); }
-
 @media (max-width: 900px) {
   .mode-card { padding: 28px 24px; }
   .mini-spectrum { height: 72px; margin-bottom: 22px; }
@@ -374,9 +466,9 @@ p.field-hint { margin: -4px 0 0; }
 @media (max-width: 760px) {
   .plans-grid { grid-template-columns: minmax(0, 1fr); max-width: 520px; }
   .panel { padding: 24px 20px; }
-  .player { gap: 10px; padding: 12px 14px; }
+  .player { gap: 10px; padding: 8px 14px 8px 8px; }
   .track-row { grid-template-columns: minmax(0, 1fr) 4ch auto; row-gap: 8px; }
-  .track-row .range { grid-column: 1 / -1; grid-row: 2; }
+  .track-row .glass-range { grid-column: 1 / -1; grid-row: 2; }
   .nav-inner { padding-inline: 20px; }
   .nav-actions { gap: 16px; }
   .mode-grid { grid-template-columns: 1fr; max-width: 520px; margin-inline: auto; }
@@ -388,7 +480,8 @@ p.field-hint { margin: -4px 0 0; }
   .workspace-footer { align-items: flex-start; flex-direction: column; gap: 12px; }
 }
 @media (max-width: 640px) {
-  .nav-how, .nav-planes, .nav-help, .nav-login { display: none; }
+  .plans-header { padding-inline: 0; }
+  .nav-how, .nav-planes, .nav-login { display: none; }
   .menu-mobile { display: flex; }
   .nav-actions { gap: 12px; }
   .nav-actions .profile { margin-left: 4px; }
@@ -414,3 +507,37 @@ p.field-hint { margin: -4px 0 0; }
   .progress.is-indeterminate .progress-fill { width: 100%; opacity: .5; }
   .reveal-pending, .reveal-ready, .primary-button:not(:disabled):hover { opacity: 1; transform: none; }
 }
+
+/* Ventana de limite de separaciones (index.js): logo y nombre arriba al centro; las barras del logo suben y
+   bajan despacio, sin parar, cada una a su ritmo. Con "reducir movimiento" se quedan quietas (regla global). */
+.limit-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 20px; }
+/* Logo de la ventana de limite, de la cabecera de Planes y de la barra del home (tras su entrada, .is-alive):
+   sus barras suben y bajan despacio, sin parar. */
+.limit-logo { display: block; width: auto; height: 34px; overflow: visible; fill: var(--text); }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect { transform-box: fill-box; transform-origin: center; animation: limit-eq 3.6s ease-in-out infinite alternate; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(1) { animation-duration: 3.2s; animation-delay: -1.4s; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(2) { animation-duration: 4.1s; animation-delay: -2.6s; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(3) { animation-duration: 3.6s; animation-delay: -.6s; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(4) { animation-duration: 3.9s; animation-delay: -3.1s; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(5) { animation-duration: 3.3s; animation-delay: -1.9s; }
+:is(.limit-logo, .plans-header .brand-bars, .site-header .brand-bars.is-alive) rect:nth-child(6) { animation-duration: 4.4s; animation-delay: -.9s; }
+@keyframes limit-eq { from { transform: scaleY(.5); } to { transform: scaleY(1); } }
+.limit-word { font-size: 24px; font-weight: 600; line-height: 1; letter-spacing: -.01em; color: var(--text); }
+
+/* Ojo para ver u ocultar la contrasena */
+.clave-caja { position: relative; display: block; }
+.clave-caja input { padding-right: 56px; }
+.clave-ojo { position: absolute; top: 50%; right: 8px; width: 40px; height: 40px; margin-top: -20px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--text-2); cursor: pointer; transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.clave-ojo:hover, .clave-ojo[aria-pressed="true"] { color: var(--accent); }
+
+/* Aparicion tras restaurar un trabajo al recargar */
+/* Los titulos de proceso y resultados reciben el foco por codigo (lectores de pantalla); sin recuadro visible. */
+:is(#job-title, #results-title):focus { outline: none; }
+
+/* Reproductor mientras cargan las pistas: ya con su color final (no se pulsa hasta que estan listas). */
+.results-panel .play-button:disabled { background: var(--accent-fill); color: var(--text-on-accent); }
+.results-panel #seek.range:disabled, .results-panel .glass-range-seek:has(.glass-range-input:disabled) { opacity: 1; }
+/* Al recargar con un trabajo abierto el panel entra con calma: un fundido corto y 8px de recorrido. */
+@keyframes panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+html.restore-in :is(#results-panel, #job-panel) { animation: panel-in 400ms var(--ease) both; }
+@media (prefers-reduced-motion: reduce) { html.restore-in :is(#results-panel, #job-panel) { animation: none; } }
