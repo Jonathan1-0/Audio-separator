@@ -46,6 +46,11 @@ def cambiar_password(db: Session, usuario: Usuario, password_hash: str) -> None:
     db.add(usuario)
 
 
+def borrar_otras_sesiones(db: Session, usuario_id: int, token: str) -> None:
+    """Cierra las sesiones del usuario menos la de este token."""
+    db.execute(delete(Sesion).where(Sesion.usuario_id == usuario_id, Sesion.token != token))
+
+
 def borrar_sesiones_de(db: Session, usuario_id: int) -> None:
     """Cierra todas las sesiones del usuario."""
     db.execute(delete(Sesion).where(Sesion.usuario_id == usuario_id))

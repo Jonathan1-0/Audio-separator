@@ -2,10 +2,12 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models.tablas import Resultado, Trabajo
+
+CANCELADO = "Cancelado por el usuario"
 
 
 def crear(db: Session, **datos) -> None:
@@ -61,7 +63,7 @@ def marcar_borrado(db: Session, trabajo_id: str, ahora: datetime, cancelado: boo
     if trabajo is None:
         return
     if cancelado:
-        trabajo.estado, trabajo.mensaje_error, trabajo.terminado_en = "error", "Cancelado por el usuario", ahora
+        trabajo.estado, trabajo.mensaje_error, trabajo.terminado_en = "error", CANCELADO, ahora
     for resultado in trabajo.resultados:
         resultado.expira_en = min(resultado.expira_en, ahora)
     db.commit()
@@ -87,7 +89,12 @@ def listar_por_usuario(db: Session, usuario_id: int, desde: datetime) -> List[Tr
 
 
 def contar_en_periodo(db: Session, usuario_id: int, inicio: datetime, fin: datetime) -> int:
+    """Trabajos que cuentan para el límite: los que fallan por el servidor no cuentan;
+    los que el usuario cancela sí (ya usaron la GPU o un lugar en la cola)."""
     consulta = select(func.count(Trabajo.id)).where(
-        Trabajo.usuario_id == usuario_id, Trabajo.creado_en >= inicio, Trabajo.creado_en < fin
+        Trabajo.usuario_id == usuario_id,
+        Trabajo.creado_en >= inicio,
+        Trabajo.creado_en < fin,
+        or_(Trabajo.estado != "error", Trabajo.mensaje_error == CANCELADO),
     )
     return db.scalar(consulta) or 0

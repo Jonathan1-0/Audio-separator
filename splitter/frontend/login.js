@@ -19,6 +19,8 @@ const confirm = $('login-confirm');
 const nameInput = $('login-name');
 const submit = $('login-submit');
 const message = $('login-message');
+const codeInput = $('login-code');
+let pideCodigo = false;    // la cuenta tiene verificacion en dos pasos: se pide el codigo
 const modes = {
   login: { title: 'Inicia sesión', lead: 'Tu plan, tus límites y, con Pro, tus audios guardados en Mis audios.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
@@ -65,6 +67,9 @@ function setMode(next) {
   password.required = next !== 'reset';
   confirm.required = choosing;
   nameInput.required = next === 'register';
+  pideCodigo = false;
+  $('code-field').hidden = true;
+  codeInput.value = '';
   setMessage();
 }
 
@@ -238,7 +243,7 @@ form.addEventListener('submit', async (event) => {
       return;
     }
     if (mode === 'register') await window.registrarse(email.value.trim(), nameInput.value.trim(), password.value);
-    else await window.iniciarSesion(email.value.trim(), password.value);
+    else await window.iniciarSesion(email.value.trim(), password.value, pideCodigo ? codeInput.value.trim() : '');
     sending = false;
     submit.disabled = false;
     await requestClose();
@@ -246,6 +251,13 @@ form.addEventListener('submit', async (event) => {
     sending = false;
     submit.disabled = false;
     showMessage(error.message);
+    // Verificacion en dos pasos: el servidor pide el codigo; se muestra el campo y se vuelve a enviar.
+    if (error.dosPasos && mode === 'login') {
+      pideCodigo = true;
+      $('code-field').hidden = false;
+      codeInput.value = '';
+      codeInput.focus();
+    }
   }
 });
 

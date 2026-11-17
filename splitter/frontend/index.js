@@ -351,6 +351,12 @@
 
   fileInput.addEventListener('change', () => selectFile(fileInput.files[0]));
   $('remove-file').addEventListener('click', () => { clearFile(); fileInput.focus(); });
+  // Todo el recuadro abre el selector, no solo "elige uno" (mientras no haya archivo elegido).
+  // El <label> ya lo abre por si mismo: se ignora para no abrirlo dos veces.
+  dropzone.addEventListener('click', (event) => {
+    if (!$('upload-prompt').offsetParent || event.target.closest('label, button, a, input')) return;
+    fileInput.click();
+  });
   dropzone.addEventListener('dragenter', (event) => { event.preventDefault(); dragDepth++; dropzone.classList.add('is-dragover'); });
   dropzone.addEventListener('dragover', (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; });
   dropzone.addEventListener('dragleave', (event) => { event.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropzone.classList.remove('is-dragover'); } });
@@ -522,7 +528,9 @@
 
   function follow(id) {
     if (!('EventSource' in window)) { poll(id); return; }
-    events = new EventSource(`/api/jobs/${id}/events`);
+    // events_url trae la firma del dueño; sin ella el servidor no manda el progreso de un trabajo con cuenta.
+    const firmado = currentJob && currentJob.id === id ? currentJob.events_url : '';
+    events = new EventSource(firmado || `/api/jobs/${id}/events`);
     events.addEventListener('update', (event) => { try { handleUpdate(JSON.parse(event.data)); } catch { /* dato ilegible */ } });
     events.addEventListener('gone', () => failJob('Este trabajo ya no está disponible. Vuelve a subir el archivo.'));
     events.onerror = () => {
@@ -541,7 +549,8 @@
     const mismoAnio = d.getFullYear() === new Date().getFullYear();
     return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', ...(mismoAnio ? {} : { year: 'numeric' }) });
   }
-  const sinSeparaciones = (c) => Boolean(c) && c.trabajos_usados >= c.trabajos_por_mes;
+  // trabajos_por_mes null = ilimitados (Pro y admin): nunca se quedan sin separaciones.
+  const sinSeparaciones = (c) => Boolean(c) && c.trabajos_por_mes != null && c.trabajos_usados >= c.trabajos_por_mes;
   let limitDialog = null;
   function showLimit(serverMessage = '') {
     if (!window.crearDialogoCuenta) { showError(serverMessage); return; }
@@ -943,7 +952,7 @@
   // Descarga en dos pasos: el servidor convierte el formato la primera vez (puede tardar).
   async function prepareDownload(button, baseUrl) {
     if (button.getAttribute('aria-disabled') === 'true') return;
-    const url = `${baseUrl}?format=${encodeURIComponent($('format').value)}`;
+    const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}format=${encodeURIComponent($('format').value)}`;   // baseUrl ya puede traer ?firma=
     const label = button.textContent;
     button.textContent = 'Preparando…';
     button.setAttribute('aria-disabled', 'true');
@@ -1045,7 +1054,7 @@
   (async () => {
     // Llegada desde el logo de otra pagina (index.html#inicio): siempre al inicio.
     if (location.hash === '#inicio') { forgetJobId(); history.replaceState(null, '', location.pathname + location.search); }
-    const id = /#(restablecer|sesion|error)=/.test(location.hash) ? '' : savedJobId();   // esos hash los manejan otros scripts
+    const id = /#(restablecer|sesion|error|verificar|dos-pasos|conectado)=/.test(location.hash) ? '' : savedJobId();   // esos hash los manejan otros scripts
     if (!id) { reveal(); return; }
     const safety = setTimeout(reveal, 2500);   // nunca dejar el contenido oculto
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // si no, el navegador pisa el scroll

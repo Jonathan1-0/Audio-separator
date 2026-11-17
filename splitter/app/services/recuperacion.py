@@ -1,7 +1,6 @@
 """Recuperar la contraseña con un enlace por correo."""
 import hashlib
 import hmac
-import logging
 import secrets
 import time
 
@@ -14,11 +13,9 @@ from ..ratelimit import RateLimiter
 from ..repositories import usuarios as repo_usuarios
 from . import auth, correo
 
-log = logging.getLogger("splitter.recuperacion")
-
 _CLAVE = (config.SECRET_KEY or secrets.token_hex(32)).encode()
 # Máximo 5 solicitudes por hora desde la misma IP
-_por_ip = RateLimiter(5, 3600)
+_por_ip = RateLimiter(5, 3600, config.DATA_DIR / "limite_recuperar.json")
 ENLACE_INVALIDO = "El enlace no es válido o ya venció. Pide uno nuevo."
 
 
@@ -41,17 +38,16 @@ def pedir(email: str, ip: str, base: str) -> None:
     if usuario is None or usuario.estado != "activo":
         return
     enlace = f"{base}/#restablecer={crear_codigo(usuario)}"
-    texto = (
-        f"Hola, {usuario.nombre}:\n\n"
-        "Recibimos una solicitud para cambiar la contraseña de tu cuenta de Splitter.\n"
-        f"Abre este enlace para elegir una nueva (sirve {config.MINUTOS_RECUPERACION} minutos):\n\n"
-        f"{enlace}\n\n"
-        "Si no fuiste tú, ignora este correo: tu contraseña sigue igual.\n"
+    correo.enviar_aviso(
+        usuario.email,
+        "Cambia tu contraseña de Splitter",
+        f"Hola, {usuario.nombre}",
+        ["Recibimos una solicitud para cambiar la contraseña de tu cuenta de Splitter.",
+         f"Abre el enlace para elegir una nueva. Sirve {config.MINUTOS_RECUPERACION} minutos."],
+        "Elegir contraseña nueva",
+        enlace,
+        "Si no fuiste tú, ignora este correo: tu contraseña sigue igual.",
     )
-    try:
-        correo.enviar(usuario.email, "Cambia tu contraseña de Splitter", texto)
-    except Exception:
-        log.exception("No se pudo enviar el correo de recuperación")
 
 
 def cambiar(codigo: str, password_nueva: str) -> None:
@@ -66,5 +62,7 @@ def cambiar(codigo: str, password_nueva: str) -> None:
         if usuario is None or vence < time.time() or not hmac.compare_digest(firma, _firma(usuario, vence)):
             raise HTTPException(400, ENLACE_INVALIDO)
         repo_usuarios.cambiar_password(db, usuario, auth.crear_hash(password_nueva))
+        usuario.email_verificado = True  # abrió el enlace que llegó a su correo
+        usuario.tiene_password = True
         repo_usuarios.borrar_sesiones_de(db, usuario.id)  # cierra las demás sesiones
         db.commit()

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0A0A0A">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Panel · Splitter</title>
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@1&display=swap" rel="stylesheet">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="logo.png" sizes="any">
+  <link rel="stylesheet" href="styles.css?v=fichas9">
+  <link rel="stylesheet" href="admin.css?v=1">
+  <script src="admin.js?v=1" defer></script>
+</head>
+<body class="admin-page">
+  <header class="admin-top">
+    <a class="admin-logo" href="/" aria-label="Volver a Splitter"><img src="favicon.svg" alt="" width="28" height="28"> Splitter</a>
+    <span class="admin-badge">Panel</span>
+  </header>
+
+  <main class="admin-main" id="contenido">
+    <p id="admin-aviso" class="admin-aviso" role="alert" hidden></p>
+
+    <section id="admin-panel" hidden>
+      <h1 class="admin-title">Panel de administración</h1>
+
+      <div class="admin-tabs" role="tablist" aria-label="Secciones">
+        <button role="tab" id="tab-resumen" aria-controls="vista-resumen" aria-selected="true" class="admin-tab">Resumen</button>
+        <button role="tab" id="tab-usuarios" aria-controls="vista-usuarios" aria-selected="false" class="admin-tab" tabindex="-1">Usuarios</button>
+        <button role="tab" id="tab-trabajos" aria-controls="vista-trabajos" aria-selected="false" class="admin-tab" tabindex="-1">Trabajos</button>
+        <button role="tab" id="tab-pagos" aria-controls="vista-pagos" aria-selected="false" class="admin-tab" tabindex="-1">Pagos</button>
+      </div>
+
+      <section id="vista-resumen" role="tabpanel" aria-labelledby="tab-resumen" class="admin-vista">
+        <div id="resumen-tarjetas" class="admin-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="vista-usuarios" role="tabpanel" aria-labelledby="tab-usuarios" class="admin-vista" hidden>
+        <form id="buscar-usuarios" class="admin-filtros" role="search">
+          <label for="buscar-texto" class="sr-only">Buscar por correo o nombre</label>
+          <input id="buscar-texto" type="search" placeholder="Buscar por correo o nombre" autocomplete="off">
+          <button type="submit" class="admin-boton">Buscar</button>
+        </form>
+        <div class="admin-tabla-caja"><table class="admin-tabla" id="tabla-usuarios"></table></div>
+        <nav class="admin-paginas" id="paginas-usuarios" aria-label="Páginas de usuarios"></nav>
+      </section>
+
+      <section id="vista-trabajos" role="tabpanel" aria-labelledby="tab-trabajos" class="admin-vista" hidden>
+        <div class="admin-filtros">
+          <label for="filtro-estado">Estado</label>
+          <select id="filtro-estado">
+            <option value="">Todos</option>
+            <option value="en_cola">En cola</option>
+            <option value="procesando">Procesando</option>
+            <option value="completado">Completados</option>
+            <option value="error">Con error</option>
+          </select>
+        </div>
+        <div class="admin-tabla-caja"><table class="admin-tabla" id="tabla-trabajos"></table></div>
+        <nav class="admin-paginas" id="paginas-trabajos" aria-label="Páginas de trabajos"></nav>
+      </section>
+
+      <section id="vista-pagos" role="tabpanel" aria-labelledby="tab-pagos" class="admin-vista" hidden>
+        <div class="admin-tabla-caja"><table class="admin-tabla" id="tabla-pagos"></table></div>
+        <nav class="admin-paginas" id="paginas-pagos" aria-label="Páginas de pagos"></nav>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

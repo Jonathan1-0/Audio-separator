@@ -1,0 +1,44 @@
+/* Panel de administración: usa los colores y la fuente de styles.css */
+.admin-page { min-height: 100vh; font-size: 16px; }
+.admin-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 14px clamp(16px, 4vw, 40px); background: var(--nav-bg); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
+.admin-logo { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; font-size: 18px; text-decoration: none; }
+.admin-badge { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); font-size: 13px; }
+.admin-main { width: min(1180px, 100%); margin: 0 auto; padding: 28px clamp(16px, 4vw, 40px) 64px; }
+.admin-title { margin: 0 0 20px; font-size: clamp(26px, 4vw, 34px); letter-spacing: -.01em; }
+.admin-aviso { margin: 40px auto; max-width: 520px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-2); color: var(--text); text-align: center; }
+.admin-aviso a { color: var(--accent); }
+
+.admin-tabs { display: flex; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 999px; background: var(--bg-2); width: max-content; max-width: 100%; overflow-x: auto; }
+.admin-tab { min-height: 40px; padding: 8px 18px; border: 0; border-radius: 999px; background: none; color: var(--text-2); font: inherit; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.admin-tab:hover { color: var(--text); }
+.admin-tab[aria-selected="true"] { background: var(--panel-hover); color: var(--text); }
+.admin-tab:focus-visible, .admin-boton:focus-visible, .admin-filtros :is(input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.admin-tarjeta { padding: 18px 18px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-2); }
+.admin-tarjeta-valor { display: block; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.admin-tarjeta-nombre { display: block; margin-top: 4px; color: var(--text-2); font-size: 14px; }
+
+.admin-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; color: var(--text-2); }
+.admin-filtros input, .admin-filtros select { min-height: 42px; min-width: min(320px, 100%); flex: 1 1 220px; max-width: 420px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); color: var(--text); font: inherit; }
+.admin-filtros select { flex: 0 1 200px; min-width: 160px; }
+.admin-boton { min-height: 42px; padding: 8px 18px; border: 0; border-radius: 999px; background: var(--accent-fill); color: var(--text-on-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.admin-boton:hover { filter: brightness(1.1); }
+.admin-boton[disabled] { opacity: .5; cursor: default; }
+.admin-boton-sec { background: var(--panel-hover); color: var(--text); }
+.admin-boton-peligro { background: #5c1f1f; color: #ffd6d6; }
+
+.admin-tabla-caja { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-2); }
+.admin-tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
+.admin-tabla th, .admin-tabla td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
+.admin-tabla th { color: var(--text-2); font-weight: 500; font-size: 13px; }
+.admin-tabla tr:last-child td { border-bottom: 0; }
+.admin-tabla td.envuelve { white-space: normal; min-width: 220px; max-width: 360px; overflow-wrap: anywhere; }
+.admin-tabla .num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-vacio { padding: 28px; color: var(--text-2); text-align: center; }
+.etiqueta { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--panel-hover); color: var(--text-2); font-size: 12px; }
+.etiqueta-bien { background: #12361f; color: #8ff0b0; }
+.etiqueta-mal { background: #3d1515; color: #ffb3b3; }
+.etiqueta-pro { background: #10294a; color: #9cc9ff; }
+
+.admin-paginas { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; color: var(--text-2); font-size: 14px; }

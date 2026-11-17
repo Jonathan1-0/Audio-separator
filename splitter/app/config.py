@@ -43,8 +43,21 @@ MINUTOS_GUARDADO_PLAN = {
     "pro": _int("SPLITTER_MINUTOS_GUARDADO_PRO", 7 * 24 * 60),
     "admin": _int("SPLITTER_MINUTOS_GUARDADO_PRO", 7 * 24 * 60),
 }
-# Planes con "Mis audios"
-PLANES_CON_HISTORIAL = {"pro", "admin"}
+# Pago simulado de Pro (sin cobrar). Solo para pruebas: apagado, nadie puede activar Pro gratis.
+PAGOS_SIMULADOS = os.getenv("SPLITTER_PAGOS_SIMULADOS", "0") == "1"
+
+# Planes con "Mis audios" (cada uno ve lo que guarda su plan)
+PLANES_CON_HISTORIAL = {"gratis", "pro", "admin"}
+
+# Los periodos se renuevan a esta hora (hora local de esta zona) del día de renovación
+ZONA_HORARIA = os.getenv("SPLITTER_ZONA_HORARIA", "America/Mexico_City")
+HORA_RENOVACION = _int("SPLITTER_HORA_RENOVACION", 1)
+
+# Foto de perfil
+MAX_FOTO_BYTES = 2 * 1024 * 1024
+
+# El panel de administración pide tener activa la verificación en dos pasos
+ADMIN_REQUIERE_DOS_PASOS = os.getenv("SPLITTER_ADMIN_REQUIERE_DOS_PASOS", "1") == "1"
 
 # Cuenta de administrador (opcional, solo en .env)
 ADMIN_EMAIL = os.getenv("SPLITTER_ADMIN_EMAIL", "").strip().lower()
@@ -61,8 +74,21 @@ MODAL_APP = os.getenv("SPLITTER_MODAL_APP", "splitter-gpu-l4")
 # Minutos que se espera una GPU. 0 = sin límite
 MODAL_START_MINUTES = _int("SPLITTER_MODAL_START_MINUTES", 5)
 
-# Quién puede llamar a la API desde otra página
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("SPLITTER_ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+# Quién puede llamar a la API desde otra página. Vacío = solo la misma página (lo normal,
+# porque la API sirve el front). Ejemplo: https://splitter.mx,https://www.splitter.mx
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("SPLITTER_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+# Límites contra quien prueba contraseñas o crea cuentas en masa
+LOGIN_POR_IP = _int("SPLITTER_LOGIN_POR_IP", 30)  # intentos cada 15 min por IP
+LOGIN_FALLOS_POR_CUENTA = _int("SPLITTER_LOGIN_FALLOS_POR_CUENTA", 8)  # fallos cada 15 min por correo
+REGISTROS_POR_IP = _int("SPLITTER_REGISTROS_POR_IP", 10)  # cuentas nuevas por hora por IP
+CORREOS_POR_CUENTA = _int("SPLITTER_CORREOS_POR_CUENTA", 5)  # correos de verificación por hora
+
+# Días que se guarda la fila de un trabajo (sin audio) antes de borrarla de la base
+DIAS_HISTORIAL_TRABAJOS = _int("SPLITTER_DIAS_HISTORIAL_TRABAJOS", 90)
+
+# Horas que sirve el enlace para confirmar el correo
+HORAS_VERIFICACION = _int("SPLITTER_HORAS_VERIFICACION", 48)
 
 ALLOWED_INPUT_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".aiff", ".aif"}
 
@@ -124,8 +150,16 @@ MDXC_OVERLAP = _int("SPLITTER_MDXC_OVERLAP", 4)
 # Recuperar contraseña y entrar con Google o Facebook
 # Dirección de la página. Vacía = la misma con la que se abrió
 PUBLIC_URL = os.getenv("SPLITTER_PUBLIC_URL", "").rstrip("/")
-# Clave para firmar los enlaces de recuperación
+# Clave para firmar enlaces (recuperación, verificación y descargas). Debe estar en .env:
+# sin ella se inventa una al arrancar y los enlaces dejan de servir al reiniciar.
 SECRET_KEY = os.getenv("SPLITTER_SECRET_KEY", "")
+
+# Errores a Sentry (opcional): la dirección DSN del proyecto
+SENTRY_DSN = os.getenv("SPLITTER_SENTRY_DSN", "").strip()
+# Logs en JSON (una línea por evento), útil en producción
+LOGS_JSON = os.getenv("SPLITTER_LOGS_JSON", "0") == "1"
+# Contacto que aparece en las páginas legales y en los correos
+CONTACTO_EMAIL = os.getenv("SPLITTER_CONTACTO_EMAIL", "").strip()
 MINUTOS_RECUPERACION = _int("SPLITTER_MINUTOS_RECUPERACION", 30)
 
 # Correo de salida. Sin SMTP_USER el enlace sale en la terminal
@@ -133,6 +167,10 @@ SMTP_HOST = os.getenv("SPLITTER_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = _int("SPLITTER_SMTP_PORT", 587)
 SMTP_USER = os.getenv("SPLITTER_SMTP_USER", "").strip()
 SMTP_PASSWORD = os.getenv("SPLITTER_SMTP_PASSWORD", "")
+# Desde qué dirección y con qué nombre salen los correos. Vacío = SMTP_USER.
+# Con dominio propio, por ejemplo: no-responder@splitter.mx (en Resend el usuario SMTP es "resend")
+SMTP_FROM = os.getenv("SPLITTER_SMTP_FROM", "").strip()
+SMTP_NOMBRE = os.getenv("SPLITTER_SMTP_NOMBRE", "Splitter").strip() or "Splitter"
 
 # Claves de Google y Facebook
 GOOGLE_CLIENT_ID = os.getenv("SPLITTER_GOOGLE_CLIENT_ID", "").strip()

@@ -1,5 +1,7 @@
 """Periodo vigente y límites del plan del usuario."""
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone
+from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -11,12 +13,25 @@ from ..repositories import suscripciones as repo_suscripciones
 from ..repositories import trabajos as repo_trabajos
 
 
+try:
+    _ZONA = ZoneInfo(config.ZONA_HORARIA)
+except (ZoneInfoNotFoundError, ValueError):
+    _ZONA = timezone(timedelta(hours=-6))  # Ciudad de México, sin horario de verano
+
+
+def fin_de_periodo(inicio: datetime) -> datetime:
+    """Fin del periodo: el día de renovación a la HORA_RENOVACION local (en UTC, sin zona)."""
+    local = inicio.replace(tzinfo=timezone.utc).astimezone(_ZONA)
+    dia = (local + timedelta(days=config.DIAS_PERIODO)).date()
+    fin = datetime.combine(dia, time(config.HORA_RENOVACION), tzinfo=_ZONA)
+    return fin.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def crear_periodo_gratis(db: Session, usuario_id: int, plan_nombre: str = "gratis") -> Suscripcion:
     """Crea un periodo nuevo del plan gratis."""
     plan = repo_suscripciones.buscar_plan(db, plan_nombre)
     inicio = ahora_utc()
-    fin = inicio + timedelta(days=config.DIAS_PERIODO)
-    return repo_suscripciones.crear_suscripcion(db, usuario_id, plan, inicio, fin)
+    return repo_suscripciones.crear_suscripcion(db, usuario_id, plan, inicio, fin_de_periodo(inicio))
 
 
 def suscripcion_vigente(db: Session, usuario_id: int) -> Suscripcion:
@@ -43,12 +58,19 @@ def minutos_guardado(plan: str) -> int:
     return config.MINUTOS_GUARDADO_PLAN.get(plan, config.JOB_TTL_MINUTES)
 
 
+def limite_trabajos(plan) -> Optional[int]:
+    """Audios por periodo del plan, o None si son ilimitados (0 en la base)."""
+    return plan.trabajos_por_mes if plan.trabajos_por_mes and plan.trabajos_por_mes > 0 else None
+
+
 def _revisar_cantidad(db: Session, suscripcion: Suscripcion) -> None:
+    if limite_trabajos(suscripcion.plan) is None:
+        return  # ilimitados: ni se cuentan
     usados = repo_trabajos.contar_en_periodo(
         db, suscripcion.usuario_id, suscripcion.inicio_periodo, suscripcion.fin_periodo
     )
-    limite = suscripcion.plan.trabajos_por_mes
-    if usados >= limite:
+    limite = limite_trabajos(suscripcion.plan)
+    if limite is not None and usados >= limite:
         raise HTTPException(
             429,
             f"Ya usaste tus {limite} trabajos de este periodo del plan {suscripcion.plan.nombre}. "

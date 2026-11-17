@@ -24,3 +24,6 @@ splitter.db
 .env
 *.pem
 *.log
+
+# Respaldos de la base (tienen datos personales)
+splitter/respaldos/

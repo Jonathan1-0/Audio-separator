@@ -1,0 +1,14 @@
+{
+  "name": "Splitter",
+  "short_name": "Splitter",
+  "description": "Separa la voz, cada instrumento o limpia el ruido de tus canciones.",
+  "lang": "es-MX",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

@@ -1,5 +1,5 @@
 """Las 8 tablas de la base. Todas las fechas se guardan en UTC."""
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, false, true
 from sqlalchemy.orm import relationship
 
 from ..database import Base, ahora_utc
@@ -12,7 +12,21 @@ class Usuario(Base):
     email = Column(String(255), unique=True, nullable=False)
     nombre = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    estado = Column(String(20), nullable=False, default="activo")  # activo | suspendido
+    telefono = Column(String(20))
+    foto = Column(String(64))  # nombre del archivo en DATA_DIR/fotos
+    # Cómo se creó la cuenta: email | google | facebook
+    proveedor = Column(String(20), nullable=False, default="email", server_default="email")
+    email_verificado = Column(Boolean, nullable=False, default=False, server_default=false())
+    # Verificación en dos pasos (TOTP): secreto en base32, si ya está activa, y códigos de respaldo (hashes)
+    totp_secreto = Column(String(64))
+    totp_activo = Column(Boolean, nullable=False, default=False, server_default=false())
+    totp_respaldo = Column(Text)
+    # Cuenta de Google conectada (el "sub" de Google): así se entra con Google sin depender del correo
+    google_id = Column(String(64), unique=True, index=True)
+    facebook_id = Column(String(64), unique=True, index=True)
+    # False en cuentas creadas con Google o Facebook hasta que la persona crea su contraseña
+    tiene_password = Column(Boolean, nullable=False, default=True, server_default=true())
+    estado = Column(String(20), nullable=False, default="activo")  # activo | suspendido | borrada
     creado_en = Column(DateTime, nullable=False, default=ahora_utc)
 
 
@@ -44,6 +58,8 @@ class Suscripcion(Base):
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     plan_id = Column(Integer, ForeignKey("planes.id"), nullable=False)
     estado = Column(String(20), nullable=False, default="activa")  # activa | cancelada | vencida
+    # El usuario canceló: sigue con su plan hasta fin_periodo y después pasa a gratis
+    cancelar_al_final = Column(Boolean, nullable=False, default=False, server_default=false())
     inicio_periodo = Column(DateTime, nullable=False)
     fin_periodo = Column(DateTime, nullable=False)
 

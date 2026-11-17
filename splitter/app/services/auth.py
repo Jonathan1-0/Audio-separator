@@ -9,24 +9,43 @@ from sqlalchemy.exc import IntegrityError
 from .. import config
 from ..database import SessionLocal, ahora_utc
 from ..models.tablas import Usuario
+from ..ratelimit import RateLimiter
 from ..repositories import usuarios as repo_usuarios
 from .cuotas import crear_periodo_gratis
+
+# Se guardan en DATA_DIR: reiniciar el servidor no borra los intentos
+_login_por_ip = RateLimiter(config.LOGIN_POR_IP, 15 * 60, config.DATA_DIR / "limite_login_ip.json")
+_fallos_por_cuenta = RateLimiter(config.LOGIN_FALLOS_POR_CUENTA, 15 * 60, config.DATA_DIR / "limite_login_cuenta.json")
+_registros_por_ip = RateLimiter(config.REGISTROS_POR_IP, 3600, config.DATA_DIR / "limite_registros.json")
+_HASH_FALSO = bcrypt.hashpw(b"no-es-una-cuenta", bcrypt.gensalt()).decode()
+
+
+def _minutos(segundos: float) -> str:
+    minutos = max(1, round(segundos / 60))
+    return f"{minutos} minuto{'s' if minutos != 1 else ''}"
 
 MAX_BYTES_PASSWORD = 72  # límite de bcrypt
 
 
-def _validar_datos(email: str, nombre: str, password: str) -> None:
-    if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 255:
+def validar_email(email: str) -> None:
+    if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 255 or " " in email:
         raise HTTPException(400, "El email no es válido.")
+
+
+def _validar_datos(email: str, nombre: str, password: str) -> None:
+    validar_email(email)
     if not nombre or len(nombre) > 100:
         raise HTTPException(400, "El nombre debe tener entre 1 y 100 caracteres.")
     validar_password(password)
 
 
-def registrar(email: str, nombre: str, password: str) -> dict:
+def registrar(email: str, nombre: str, password: str, ip: str = "") -> Usuario:
     """Crea el usuario con el plan gratis."""
     email, nombre = email.strip().lower(), nombre.strip()
     _validar_datos(email, nombre, password)
+    espera = _registros_por_ip.acquire(ip)
+    if espera:
+        raise HTTPException(429, f"Se crearon demasiadas cuentas desde tu red. Intenta en {_minutos(espera)}.")
     password_hash = crear_hash(password)
     with SessionLocal() as db:
         if repo_usuarios.buscar_por_email(db, email) is not None:
@@ -38,17 +57,41 @@ def registrar(email: str, nombre: str, password: str) -> dict:
         except IntegrityError:  # correo repetido
             db.rollback()
             raise HTTPException(409, "Ya existe una cuenta con ese email.")
-    return {"id": usuario.id, "email": usuario.email, "nombre": usuario.nombre}
+    return usuario
 
 
-def login(email: str, password: str) -> dict:
+CABECERA_DOS_PASOS = {"X-Splitter-Dos-Pasos": "requerido"}
+
+
+def password_correcta(usuario: Usuario, password: str) -> bool:
+    return len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(password.encode(), usuario.password_hash.encode())
+
+
+def login(email: str, password: str, ip: str = "", codigo: str = "") -> dict:
+    email = email.strip().lower()
+    espera = _login_por_ip.acquire(ip) or _fallos_por_cuenta.espera(email)
+    if espera:
+        raise HTTPException(429, f"Demasiados intentos. Espera {_minutos(espera)} e intenta de nuevo.",
+                            headers={"Retry-After": str(int(espera) + 1)})
     with SessionLocal() as db:
-        usuario = repo_usuarios.buscar_por_email(db, email.strip().lower())
-        correcta = usuario is not None and len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(
-            password.encode(), usuario.password_hash.encode()
-        )
+        usuario = repo_usuarios.buscar_por_email(db, email)
+        # Sin cuenta también se calcula un hash: así no se nota por el tiempo si el correo existe
+        guardado = usuario.password_hash if usuario is not None else _HASH_FALSO
+        correcta = len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(password.encode(), guardado.encode())
+        correcta = correcta and usuario is not None
         if not correcta:
+            _fallos_por_cuenta.acquire(email)
             raise HTTPException(401, "Email o contraseña incorrectos.")
+        if usuario.totp_activo:
+            from . import dos_pasos  # aquí: dos_pasos también importa este módulo
+
+            if not codigo:
+                raise HTTPException(401, "Escribe el código de 6 dígitos de tu app de autenticación.", headers=CABECERA_DOS_PASOS)
+            if not dos_pasos.verificar(usuario, codigo, db):
+                db.commit()
+                _fallos_por_cuenta.acquire(email)
+                raise HTTPException(401, "El código no es correcto.", headers=CABECERA_DOS_PASOS)
+        _fallos_por_cuenta.limpiar(email)
         if usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
         datos = abrir_sesion(db, usuario)
@@ -63,7 +106,13 @@ def abrir_sesion(db, usuario: Usuario) -> dict:
     token = secrets.token_hex(32)
     expira_en = ahora + timedelta(days=config.DIAS_SESION)
     repo_usuarios.crear_sesion(db, usuario.id, token, expira_en)
-    return {"token": token, "expira_en": f"{expira_en.isoformat()}Z", "nombre": usuario.nombre}
+    # "token" va solo en la cookie HttpOnly; "sesion" es un identificador para la página que no sirve para entrar
+    return {"token": token, "sesion": secrets.token_hex(8), "expira_en": f"{expira_en.isoformat()}Z", "nombre": usuario.nombre}
+
+
+def publico(datos: dict) -> dict:
+    """Lo que ve la página de una sesión nueva (sin el token)."""
+    return {k: v for k, v in datos.items() if k != "token"}
 
 
 def validar_password(password: str) -> None:

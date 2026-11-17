@@ -34,7 +34,7 @@ def test_planes_gratis_y_pro(cliente):
 def _sesion(cliente) -> dict:
     """Crea una cuenta, inicia sesión y devuelve la cabecera con su token."""
     email, _ = _registrar(cliente)
-    token = cliente.post("/auth/login", json={"email": email, "password": "clave-segura-1"}).json()["token"]
+    token = cliente.post("/auth/login", json={"email": email, "password": "clave-segura-1"}).cookies["splitter_sesion"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -64,7 +64,7 @@ def test_login_correcto(cliente):
     email, _ = _registrar(cliente)
     res = cliente.post("/auth/login", json={"email": email, "password": "clave-segura-1"})
     assert res.status_code == 200
-    assert res.json()["token"]
+    assert res.cookies["splitter_sesion"]
 
 
 def test_login_con_password_incorrecta(cliente):

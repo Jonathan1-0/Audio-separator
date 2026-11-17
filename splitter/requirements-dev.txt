@@ -1,3 +1,6 @@
 # Dependencias para las pruebas
 pytest
 httpx
+ruff
+# Pruebas en navegador (pytest e2e)
+playwright

@@ -13,7 +13,7 @@
 
   const MAX_FOTO = 2 * 1024 * 1024;
   const TIPOS_FOTO = ['image/png', 'image/jpeg', 'image/webp'];
-  const SIN_SOPORTE = 'Todavía no se puede guardar este dato: el servidor aún no tiene esa función.';
+  const RED = { google: 'Google', facebook: 'Facebook' };
 
   // Los tres datos editables. "valida" devuelve el texto de error, o '' si el valor sirve.
   const CAMPOS = {
@@ -78,12 +78,83 @@
           <div class="profile-row">
             <div class="profile-row-text">
               <span class="profile-label">Contraseña</span>
-              <span class="profile-value profile-dots" aria-label="Contraseña oculta">••••••••</span>
+              <span class="profile-value profile-dots" id="valor-clave" aria-label="Contraseña oculta">••••••••</span>
             </div>
             <button type="button" class="icon-button" id="editar-clave" aria-label="Cambiar contraseña">${PLUMA}</button>
           </div>
+          <div class="profile-row">
+            <div class="profile-row-text">
+              <span class="profile-label">Verificación en dos pasos</span>
+              <span class="profile-value" id="valor-dos-pasos"></span>
+            </div>
+            <button type="button" class="text-button text-button-accent profile-row-action" id="boton-dos-pasos"></button>
+          </div>
+          ${['google', 'facebook'].map((red) => `
+          <div class="profile-row" id="fila-${red}" hidden>
+            <div class="profile-row-text">
+              <span class="profile-label">${RED[red]}</span>
+              <span class="profile-value" id="valor-${red}"></span>
+            </div>
+            <button type="button" class="text-button text-button-accent profile-row-action" id="boton-${red}"></button>
+          </div>`).join('')}
+        </div>
+        <div class="profile-actions">
+          <button type="button" class="text-button" id="perfil-cerrar-todas">Cerrar sesión en todos los dispositivos</button>
+          <button type="button" class="text-button text-button-danger" id="perfil-borrar">Borrar mi cuenta</button>
         </div>
       </section>
+      <form class="profile-view" data-vista="dos-pasos" aria-labelledby="dos-titulo" novalidate hidden>
+        <div class="profile-bar">
+          <button type="button" class="text-button" id="dos-cancelar">Cancelar</button>
+          <button type="submit" class="text-button text-button-accent" id="dos-guardar">Activar</button>
+        </div>
+        <h2 id="dos-titulo" class="profile-title">Verificación en dos pasos</h2>
+        <div id="dos-paso-qr">
+          <p class="profile-hint">1. Escanea este código con tu app de autenticación (Google Authenticator, Authy, 1Password…).</p>
+          <div class="dos-qr"><img id="dos-qr" alt="Código QR para tu app de autenticación" width="200" height="200"></div>
+          <p class="profile-hint">¿No puedes escanearlo? Escribe esta clave en la app:</p>
+          <p class="dos-secreto" id="dos-secreto"></p>
+          <div class="profile-fields">
+            <label class="profile-field" for="dos-codigo"><span>2. Escribe el código de 6 dígitos que muestra la app</span>
+              <input id="dos-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="dos-error"></label>
+          </div>
+        </div>
+        <div id="dos-paso-respaldo" hidden>
+          <p class="profile-hint">Listo, quedó activada. Guarda estos <strong>códigos de respaldo</strong> en un lugar seguro: si pierdes tu teléfono, cada uno sirve una vez para entrar. No los volveremos a mostrar.</p>
+          <ol class="dos-respaldo" id="dos-respaldo"></ol>
+          <button type="button" class="text-button text-button-accent" id="dos-copiar">Copiar códigos</button>
+        </div>
+        <p id="dos-error" class="profile-message" role="alert" hidden></p>
+      </form>
+      <form class="profile-view" data-vista="dos-quitar" aria-labelledby="dos-quitar-titulo" novalidate hidden>
+        <div class="profile-bar">
+          <button type="button" class="text-button" id="dos-quitar-cancelar">Cancelar</button>
+          <button type="submit" class="text-button text-button-danger" id="dos-quitar-guardar">Desactivar</button>
+        </div>
+        <h2 id="dos-quitar-titulo" class="profile-title">Desactivar dos pasos</h2>
+        <p class="profile-hint profile-warning">Tu cuenta quedará protegida solo con tu contraseña.</p>
+        <div class="profile-fields">
+          <label class="profile-field" for="dos-quitar-clave" id="dos-quitar-clave-campo"><span>Tu contraseña</span>
+            <input id="dos-quitar-clave" type="password" autocomplete="current-password" maxlength="72"></label>
+          <label class="profile-field" for="dos-quitar-codigo"><span>Código de tu app o de respaldo</span>
+            <input id="dos-quitar-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" aria-describedby="dos-quitar-error"></label>
+        </div>
+        <p id="dos-quitar-error" class="profile-message" role="alert" hidden></p>
+      </form>
+      <form class="profile-view" data-vista="borrar" aria-labelledby="borrar-titulo" novalidate hidden>
+        <div class="profile-bar">
+          <button type="button" class="text-button" id="borrar-cancelar">Cancelar</button>
+          <button type="submit" class="text-button text-button-danger" id="borrar-confirmar">Borrar</button>
+        </div>
+        <h2 id="borrar-titulo" class="profile-title">Borrar cuenta</h2>
+        <p class="profile-hint profile-warning">Se borran tu cuenta, tus audios y tus datos personales. No se puede deshacer.
+          Si tienes Pro, se cancela sin reembolso del periodo actual.</p>
+        <div class="profile-fields">
+          <label class="profile-field" for="borrar-dato"><span id="borrar-etiqueta">Tu contraseña</span>
+            <input id="borrar-dato" type="password" autocomplete="current-password" maxlength="255" aria-describedby="borrar-error"></label>
+        </div>
+        <p id="borrar-error" class="profile-message" role="alert" hidden></p>
+      </form>
       <form class="profile-view" data-vista="clave" aria-labelledby="clave-titulo" novalidate hidden>
         <div class="profile-bar">
           <button type="button" class="text-button" id="clave-cancelar">Cancelar</button>
@@ -92,7 +163,7 @@
         <h2 id="clave-titulo" class="profile-title">Contraseña</h2>
         <input type="email" id="clave-usuario" autocomplete="username" hidden>
         <div class="profile-fields">
-          <label class="profile-field" for="clave-actual"><span>Contraseña actual</span>
+          <label class="profile-field" for="clave-actual" id="clave-actual-campo"><span>Contraseña actual</span>
             <input id="clave-actual" type="password" autocomplete="current-password" maxlength="72" aria-describedby="clave-error"></label>
           <label class="profile-field" for="clave-nueva"><span>Nueva contraseña</span>
             <input id="clave-nueva" type="password" autocomplete="new-password" maxlength="72" aria-describedby="clave-ayuda clave-error"></label>
@@ -129,6 +200,17 @@
     dialogo.querySelector('[data-vista="editar"]').addEventListener('submit', (event) => { event.preventDefault(); guardarCampo(); });
     $('#editar-clave').addEventListener('click', abrirClave);
     $('#clave-cancelar').addEventListener('click', () => volverAPerfil());
+    $('#perfil-cerrar-todas').addEventListener('click', cerrarTodas);
+    $('#boton-dos-pasos').addEventListener('click', () => (window.getSesion()?.cuenta?.dos_pasos ? abrirQuitarDosPasos() : abrirDosPasos()));
+    $('#dos-cancelar').addEventListener('click', () => volverAPerfil());
+    $('#dos-copiar').addEventListener('click', copiarRespaldo);
+    dialogo.querySelector('[data-vista="dos-pasos"]').addEventListener('submit', (event) => { event.preventDefault(); confirmarDosPasos(); });
+    $('#dos-quitar-cancelar').addEventListener('click', () => volverAPerfil());
+    dialogo.querySelector('[data-vista="dos-quitar"]').addEventListener('submit', (event) => { event.preventDefault(); quitarDosPasos(); });
+    for (const red of Object.keys(RED)) $(`#boton-${red}`).addEventListener('click', () => botonRed(red));
+    $('#perfil-borrar').addEventListener('click', abrirBorrar);
+    $('#borrar-cancelar').addEventListener('click', () => volverAPerfil());
+    dialogo.querySelector('[data-vista="borrar"]').addEventListener('submit', (event) => { event.preventDefault(); borrarCuenta(); });
     dialogo.querySelector('[data-vista="clave"]').addEventListener('submit', (event) => { event.preventDefault(); guardarClave(); });
 
     // Escape en la vista de edicion vuelve a Perfil (sin guardar) en lugar de cerrar la ventana.
@@ -151,7 +233,7 @@
 
   function mostrarVista(vista) {
     for (const v of dialogo.querySelectorAll('[data-vista]')) v.hidden = v.dataset.vista !== vista;
-    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo' }[vista] || 'perfil-titulo');
+    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo', borrar: 'borrar-titulo', 'dos-pasos': 'dos-titulo', 'dos-quitar': 'dos-quitar-titulo' }[vista] || 'perfil-titulo');
   }
 
   // ---------- Vista Perfil ----------
@@ -172,6 +254,28 @@
     $('#perfil-iniciales').textContent = (s.nombre || s.email || '?').trim().charAt(0).toUpperCase();
     $('#perfil-cambiar-foto').textContent = url ? 'Cambiar foto' : 'Elegir foto';
     $('#perfil-guardar-foto').hidden = !fotoPendiente;
+    const c = s.cuenta || {};
+    $('#valor-dos-pasos').textContent = c.dos_pasos ? 'Activada' : 'Desactivada';
+    $('#valor-dos-pasos').classList.toggle('is-empty', !c.dos_pasos);
+    $('#boton-dos-pasos').textContent = c.dos_pasos ? 'Desactivar' : 'Activar';
+    // Contraseña: las cuentas de Google o Facebook empiezan sin una propia y la pueden crear.
+    const sinClave = c.tiene_password === false;
+    $('#valor-clave').textContent = sinClave ? 'Sin contraseña' : '••••••••';
+    $('#valor-clave').classList.toggle('is-empty', sinClave);
+    $('#valor-clave').setAttribute('aria-label', sinClave ? 'Sin contraseña' : 'Contraseña oculta');
+    $('#editar-clave').setAttribute('aria-label', sinClave ? 'Crear contraseña' : 'Cambiar contraseña');
+    // Google y Facebook: solo las filas de las redes que el servidor tiene configuradas.
+    window.proveedoresSociales().then((p) => {
+      for (const red of Object.keys(RED)) {
+        const conectada = Boolean(c[`${red}_conectado`]);
+        $(`#fila-${red}`).hidden = !p?.[red] && !conectada;
+        $(`#valor-${red}`).textContent = conectada ? 'Conectada' : 'Sin conectar';
+        $(`#valor-${red}`).classList.toggle('is-empty', !conectada);
+        $(`#boton-${red}`).textContent = conectada ? 'Desconectar' : 'Conectar';
+        $(`#boton-${red}`).setAttribute('aria-label', `${conectada ? 'Desconectar' : 'Conectar'} ${RED[red]}`);
+        $(`#boton-${red}`).hidden = !conectada && !p?.[red];   // sin claves no se puede conectar, pero si desconectar
+      }
+    });
   }
 
   function abrirPerfil() {
@@ -222,7 +326,6 @@
       } catch {
         throw new Error('No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.');
       }
-      if (res.status === 404 || res.status === 405) throw new Error('Todavía no se puede guardar la foto: el servidor aún no tiene esa función.');
       if (!res.ok) {
         let detalle = null;
         try { detalle = (await res.json())?.detail; } catch { /* sin cuerpo */ }
@@ -255,7 +358,8 @@
     input.removeAttribute('aria-invalid');
     mostrarVista('editar');
     input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    // Los campos type=email no permiten colocar el cursor (lanza InvalidStateError): se intenta y ya.
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* email */ }
   }
 
   function volverAPerfil() {
@@ -268,8 +372,8 @@
   }
 
   // ---------- Cambiar la contraseña ----------
-  // Contrato propuesto (hoy NO existe en el backend):
-  //   POST /auth/password  body { actual, nueva }  -> 204/200; contraseña actual incorrecta -> 403
+  //   POST /auth/password  body { actual, nueva }  -> 204; contraseña actual incorrecta -> 403.
+  //   Sin contraseña propia (cuenta de Google o Facebook) "actual" va vacia y se crea.
   // Mismas reglas que el registro: entre 8 y 72 caracteres (bcrypt no acepta mas de 72 bytes).
   const camposClave = () => ['#clave-actual', '#clave-nueva', '#clave-confirmar'].map((s) => $(s));
   function limpiarClave() {
@@ -277,13 +381,17 @@
     for (const input of camposClave()) { input.value = ''; input.removeAttribute('aria-invalid'); }   // nunca se quedan en la pagina
     aviso($('#clave-error'), '');
   }
+  const sinClave = () => window.getSesion()?.cuenta?.tiene_password === false;
   function abrirClave() {
     campoActual = 'clave';
     limpiarClave();
     aviso($('#perfil-mensaje'), '');
     $('#clave-usuario').value = window.getSesion()?.email || '';   // para que el gestor de contraseñas sepa de que cuenta es
+    // Sin contraseña propia (entró con Google o Facebook): se crea sin pedir la "actual".
+    $('#clave-actual-campo').hidden = sinClave();
+    $('#clave-titulo').textContent = sinClave() ? 'Crear contraseña' : 'Contraseña';
     mostrarVista('clave');
-    $('#clave-actual').focus();
+    (sinClave() ? $('#clave-nueva') : $('#clave-actual')).focus();
   }
   async function guardarClave() {
     if (ocupado) return;
@@ -291,9 +399,10 @@
     const error = $('#clave-error');
     for (const input of camposClave()) input.removeAttribute('aria-invalid');
     const falla = (input, texto) => { aviso(error, texto); input.setAttribute('aria-invalid', 'true'); input.focus(); };
-    if (!actual.value) { falla(actual, 'Escribe tu contraseña actual.'); return; }
+    const crear = sinClave();
+    if (!crear && !actual.value) { falla(actual, 'Escribe tu contraseña actual.'); return; }
     if (nueva.value.length < 8 || new TextEncoder().encode(nueva.value).length > 72) { falla(nueva, 'La nueva contraseña debe tener entre 8 y 72 caracteres.'); return; }
-    if (nueva.value === actual.value) { falla(nueva, 'La nueva contraseña debe ser distinta de la actual.'); return; }
+    if (!crear && nueva.value === actual.value) { falla(nueva, 'La nueva contraseña debe ser distinta de la actual.'); return; }
     if (confirmar.value !== nueva.value) { falla(confirmar, 'Las contraseñas no coinciden.'); return; }
 
     ocupado = true;
@@ -306,10 +415,11 @@
       await window.apiCuenta('/auth/password', { method: 'POST', body: { actual: actual.value, nueva: nueva.value }, token: window.getSesion()?.token });
       ocupado = false;
       volverAPerfil();
-      aviso($('#perfil-mensaje'), 'Tu contraseña se cambió.');   // solo tras la confirmacion del servidor
+      await window.refrescarCuenta();
+      pintar();
+      aviso($('#perfil-mensaje'), crear ? 'Listo: ya puedes entrar también con tu correo y contraseña.' : 'Tu contraseña se cambió.');   // solo tras la confirmacion del servidor
     } catch (err) {
-      if (err.status === 404 || err.status === 405) aviso(error, 'Todavía no se puede cambiar la contraseña: el servidor aún no tiene esa función.');
-      else if (err.status === 401 || err.status === 403) falla(actual, 'La contraseña actual no es correcta.');
+      if (err.status === 401 || err.status === 403) falla(actual, 'La contraseña actual no es correcta.');
       else aviso(error, err.message);
     } finally {
       ocupado = false;
@@ -335,18 +445,158 @@
     aviso(error, '');
     input.removeAttribute('aria-invalid');
     try {
-      await window.apiCuenta('/auth/perfil', { method: 'PATCH', body: { [id]: valor } });   // 2xx = el servidor lo confirmo
+      const res = await window.apiCuenta('/auth/perfil', { method: 'PATCH', body: { [id]: valor } });   // 2xx = el servidor lo confirmo
       await window.refrescarCuenta();
       ocupado = false;
       volverAPerfil();
+      // El correo cambia hasta que se abre el enlace que llego al correo nuevo.
+      if (res?.mensaje) aviso($('#perfil-mensaje'), res.mensaje);
     } catch (err) {
-      aviso(error, err.status === 404 || err.status === 405 ? SIN_SOPORTE : err.message);
+      aviso(error, err.message);
       input.setAttribute('aria-invalid', 'true');
     } finally {
       ocupado = false;
       boton.disabled = false;
       boton.textContent = 'Guardar';
     }
+  }
+
+  // ---------- Sesiones y borrar la cuenta ----------
+  async function cerrarTodas() {
+    if (ocupado) return;
+    ocupado = true;
+    try {
+      await window.apiCuenta('/auth/logout-todo', { method: 'POST' });
+      dialogo.close();
+      window.setSesion(null);
+    } catch (err) {
+      aviso($('#perfil-mensaje'), err.message);
+    } finally { ocupado = false; }
+  }
+
+  // Cuentas con contraseña la escriben; las de Google o Facebook escriben su correo.
+  // Las cuentas sin contraseña propia confirman con su correo (borrar) o solo con el código (dos pasos).
+  const conPassword = () => window.getSesion()?.cuenta?.tiene_password !== false;
+  function abrirBorrar() {
+    campoActual = 'borrar';
+    aviso($('#perfil-mensaje'), '');
+    aviso($('#borrar-error'), '');
+    const input = $('#borrar-dato');
+    input.value = '';
+    input.removeAttribute('aria-invalid');
+    $('#borrar-etiqueta').textContent = conPassword() ? 'Escribe tu contraseña para confirmar' : 'Escribe tu correo para confirmar';
+    input.type = conPassword() ? 'password' : 'email';
+    input.autocomplete = conPassword() ? 'current-password' : 'off';
+    mostrarVista('borrar');
+    input.focus();
+  }
+  async function borrarCuenta() {
+    if (ocupado) return;
+    const input = $('#borrar-dato');
+    if (!input.value) { aviso($('#borrar-error'), conPassword() ? 'Escribe tu contraseña.' : 'Escribe tu correo.'); input.focus(); return; }
+    ocupado = true;
+    const boton = $('#borrar-confirmar');
+    boton.disabled = true;
+    boton.textContent = 'Borrando…';
+    try {
+      const body = conPassword() ? { password: input.value } : { confirmacion: input.value };
+      await window.apiCuenta('/auth/cuenta', { method: 'DELETE', body, token: window.getSesion()?.token });
+      input.value = '';
+      dialogo.close();
+      window.setSesion(null);
+    } catch (err) {
+      aviso($('#borrar-error'), err.status === 403 ? (conPassword() ? 'La contraseña no es correcta.' : 'Ese no es tu correo.') : err.message);
+      input.setAttribute('aria-invalid', 'true');
+      input.focus();
+    } finally {
+      ocupado = false;
+      boton.disabled = false;
+      boton.textContent = 'Borrar';
+    }
+  }
+
+  // ---------- Verificacion en dos pasos ----------
+  let codigosRespaldo = [];
+  async function abrirDosPasos() {
+    if (ocupado) return;
+    campoActual = 'dos-pasos';
+    aviso($('#perfil-mensaje'), '');
+    aviso($('#dos-error'), '');
+    $('#dos-paso-qr').hidden = false;
+    $('#dos-paso-respaldo').hidden = true;
+    $('#dos-guardar').textContent = 'Activar';
+    $('#dos-cancelar').textContent = 'Cancelar';
+    $('#dos-copiar').textContent = 'Copiar códigos';
+    $('#dos-codigo').value = '';
+    $('#dos-qr').removeAttribute('src');
+    $('#dos-secreto').textContent = '';
+    mostrarVista('dos-pasos');
+    try {
+      const r = await window.apiCuenta('/auth/dos-pasos/iniciar', { method: 'POST' });
+      $('#dos-qr').src = r.qr;
+      $('#dos-secreto').textContent = r.secreto.match(/.{1,4}/g).join(' ');
+      $('#dos-codigo').focus();
+    } catch (err) { aviso($('#dos-error'), err.message); }
+  }
+  async function confirmarDosPasos() {
+    if (ocupado) return;
+    if (!$('#dos-paso-respaldo').hidden) { volverAPerfil(); return; }   // "Listo" tras ver los codigos
+    const codigo = $('#dos-codigo').value.trim();
+    if (!/^\d{6}$/.test(codigo)) { aviso($('#dos-error'), 'Escribe los 6 dígitos que muestra la app.'); $('#dos-codigo').focus(); return; }
+    ocupado = true;
+    try {
+      const r = await window.apiCuenta('/auth/dos-pasos/confirmar', { method: 'POST', body: { codigo } });
+      codigosRespaldo = r.codigos_respaldo || [];
+      $('#dos-respaldo').replaceChildren(...codigosRespaldo.map((c) => Object.assign(document.createElement('li'), { textContent: c })));
+      $('#dos-paso-qr').hidden = true;
+      $('#dos-paso-respaldo').hidden = false;
+      $('#dos-guardar').textContent = 'Listo';
+      $('#dos-cancelar').textContent = 'Cerrar';
+      aviso($('#dos-error'), '');
+      window.refrescarCuenta();
+    } catch (err) {
+      aviso($('#dos-error'), err.message);
+      $('#dos-codigo').focus();
+    } finally { ocupado = false; }
+  }
+  async function copiarRespaldo() {
+    try { await navigator.clipboard.writeText(codigosRespaldo.join('\n')); $('#dos-copiar').textContent = 'Copiados'; }
+    catch { $('#dos-copiar').textContent = 'No se pudo copiar: anótalos'; }
+  }
+  function abrirQuitarDosPasos() {
+    campoActual = 'dos-quitar';
+    aviso($('#perfil-mensaje'), '');
+    aviso($('#dos-quitar-error'), '');
+    $('#dos-quitar-clave').value = '';
+    $('#dos-quitar-codigo').value = '';
+    $('#dos-quitar-clave-campo').hidden = !conPassword();
+    mostrarVista('dos-quitar');
+    (conPassword() ? $('#dos-quitar-clave') : $('#dos-quitar-codigo')).focus();
+  }
+  async function quitarDosPasos() {
+    if (ocupado) return;
+    ocupado = true;
+    try {
+      await window.apiCuenta('/auth/dos-pasos/desactivar', { method: 'POST', body: { password: $('#dos-quitar-clave').value, codigo: $('#dos-quitar-codigo').value.trim() }, token: window.getSesion()?.token });
+      await window.refrescarCuenta();
+      ocupado = false;
+      volverAPerfil();
+      aviso($('#perfil-mensaje'), 'La verificación en dos pasos quedó desactivada.');
+    } catch (err) {
+      aviso($('#dos-quitar-error'), err.message);
+    } finally { ocupado = false; }
+  }
+
+  // ---------- Google y Facebook ----------
+  async function botonRed(red) {
+    const c = window.getSesion()?.cuenta || {};
+    if (!c[`${red}_conectado`]) { location.href = `/auth/social/${red}?conectar=1`; return; }
+    try {
+      await window.apiCuenta(`/auth/social/${red}/desconectar`, { method: 'POST' });
+      await window.refrescarCuenta();
+      pintar();
+      aviso($('#perfil-mensaje'), `${RED[red]} quedó desconectado.`);
+    } catch (err) { aviso($('#perfil-mensaje'), err.message); }
   }
 
   window.abrirPerfil = abrirPerfil;

@@ -1,5 +1,5 @@
 // Sesion compartida por index.html y planes.html: estado unico conectado al backend, barra superior
-// (solo index), menu de perfil, muro de cuenta, pago (simulado) del plan Pro, cancelacion y "Mis audios".
+// (solo index), menu de perfil, muro de cuenta, plan Pro ("Proximamente" mientras no haya pagos), cancelacion y "Mis audios".
 (() => {
   'use strict';
 
@@ -10,23 +10,30 @@
   //   Sin sesion: null
   //   Con sesion: { token, nombre, email, plan: 'gratis' | 'pro', cuenta }
   //     cuenta = respuesta de GET /suscripcion (limites, consumo del periodo, historial, fin_periodo...).
-  // El token se guarda en localStorage para que la sesion siga al recargar y al pasar entre paginas.
+  // La sesion real viaja en una cookie HttpOnly que pone el servidor: este JavaScript no la puede leer
+  // (asi un script inyectado no la roba). "token" es solo un identificador de la sesion para esta pagina;
+  // se guarda en localStorage para saber, al recargar, que habia una sesion abierta.
   // =====================================================================================
   const CLAVE = 'splitter.sesion';
   let sesion = null;
   try { sesion = JSON.parse(localStorage.getItem(CLAVE)) || null; } catch { sesion = null; }
   if (sesion && (!sesion.token || !NOMBRE_PLAN[sesion.plan])) sesion = null;
+  // Sesiones de antes de la cookie guardaban el token real (64 hex): se borran y se vuelve a entrar.
+  if (sesion && /^[0-9a-f]{64}$/.test(sesion.token)) { sesion = null; try { localStorage.removeItem(CLAVE); } catch { /* nada */ } }
 
   const $ = (id) => document.getElementById(id);
   const listeners = new Set();   // otras partes de la pagina (index.js, plans.js) se enteran de los cambios
 
-  const authHeaders = () => (sesion ? { Authorization: `Bearer ${sesion.token}` } : {});
+  // La cookie de sesion va sola en cada fetch a esta misma pagina: no hace falta cabecera.
+  // Se deja la funcion porque index.js y profile.js la usan.
+  const authHeaders = () => ({});
   const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
   const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
   // ---------- Llamadas al backend ----------
+  // "token": la llamada es de esa sesion; un 401 no cierra la sesion guardada (se maneja donde se llamo).
   async function api(url, { method = 'GET', body, token } = {}) {
-    const headers = token ? { Authorization: `Bearer ${token}` } : authHeaders();
+    const headers = authHeaders();
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     let res;
     try {
@@ -43,6 +50,7 @@
       : res.status >= 500 ? 'El servidor tuvo un problema. Intenta de nuevo en unos minutos.'
         : 'No se pudo completar la acción. Intenta de nuevo.');
     error.status = res.status;
+    error.dosPasos = res.headers.get('X-Splitter-Dos-Pasos') === 'requerido';
     throw error;
   }
 
@@ -59,8 +67,10 @@
     return sesion;
   }
 
-  async function iniciarSesion(email, password) {
-    const { token } = await api('/auth/login', { method: 'POST', body: { email, password } });
+  async function iniciarSesion(email, password, codigo = '') {
+    // El servidor pone la cookie de sesion; aqui solo llega su identificador ("sesion").
+    const respuesta = await api('/auth/login', { method: 'POST', body: { email, password, codigo } });
+    const token = respuesta.sesion || respuesta.token;
     const cuenta = await api('/suscripcion', { token });
     setSesion(desdeCuenta(token, cuenta));
   }
@@ -123,213 +133,12 @@
     if (!wall.open) wall.showModal();
   }
 
-  // ---------- Contratar Pro (pago simulado) ----------
-  // Dos metodos: tarjeta (formulario completo) o PayPal (redireccion). El plan se renueva automaticamente.
-  // POST /suscripcion/pro  body { marca, ultimos4, renovacion_automatica: true }.
-  // El numero completo, el nombre, el vencimiento y el CVC solo existen en los campos del formulario para
-  // validarlos en el navegador: nunca se envian, ni se guardan (ni en localStorage ni en variables). Al backend
-  // solo llegan la marca y los ultimos 4 digitos.
-  // POST /suscripcion/paypal  body { renovacion_automatica: true } -> { url } (la ruta aun no existe en el backend).
-  // Es una simulacion: la validacion REAL de la tarjeta (largo, algoritmo, vencimiento, CVC) la hara el backend.
-  // Aqui solo se pide que los campos no esten vacios y tengan forma de tarjeta, para no rechazar tarjetas de prueba.
-  const MARCAS = {
-    amex: { nombre: 'American Express', largo: 19, cvc: 4, grupos: [4, 6, 5] },
-    visa: { nombre: 'Visa', largo: 19, cvc: 4, grupos: [4, 4, 4, 4, 3] },
-    mastercard: { nombre: 'Mastercard', largo: 19, cvc: 4, grupos: [4, 4, 4, 4, 3] },
-    otra: { nombre: 'Otra', largo: 19, cvc: 4, grupos: [4, 4, 4, 4, 3] },
-  };
-  function detectarMarca(digitos) {
-    const dos = Number(digitos.slice(0, 2));
-    const cuatro = Number(digitos.slice(0, 4));
-    if (digitos[0] === '4') return 'visa';
-    if (dos === 34 || dos === 37) return 'amex';
-    if ((dos >= 51 && dos <= 55) || (digitos.length >= 4 && cuatro >= 2221 && cuatro <= 2720)) return 'mastercard';
-    return 'otra';
-  }
-  const soloDigitos = (v) => v.replace(/\D/g, '');
-  function agrupar(digitos, grupos) {
-    const partes = [];
-    let i = 0;
-    for (const g of grupos) { if (i >= digitos.length) break; partes.push(digitos.slice(i, i + g)); i += g; }
-    return partes.join(' ');
-  }
-
-  const campoPago = (id, etiqueta, atributos) => `<div class="pay-field">
-            <label class="field" for="${id}"><span>${etiqueta}</span><input id="${id}" ${atributos} aria-describedby="${id}-error"></label>
-            <p class="pay-error" id="${id}-error" hidden></p></div>`;
-
-  let pago = null;
+  // ---------- Contratar Pro ----------
+  // Los pagos todavia no estan abiertos: Pro se muestra como "Proximamente".
   function contratarPro() {
     if (!sesion) { pedirCuenta('Para contratar Pro necesitas una cuenta. Crea una o inicia sesión y vuelve aquí.'); return; }
     if (sesion.plan === 'pro' || sesion.plan === 'admin') return;
-    if (!pago) {
-      pago = crearDialogo('wall-form');
-      pago.setAttribute('aria-labelledby', 'pago-title');
-      pago.innerHTML = `<form method="dialog" class="login-fields" novalidate>
-          <h2 id="pago-title">Contratar Pro</h2>
-          <p id="pago-text"></p>
-          <div class="pay-methods" role="radiogroup" aria-label="Método de pago">
-            <button type="button" role="radio" aria-checked="true" data-metodo="tarjeta">Tarjeta</button>
-            <button type="button" role="radio" aria-checked="false" tabindex="-1" data-metodo="paypal">PayPal</button>
-          </div>
-          <div id="pago-tarjeta" class="login-fields">
-            <div class="pay-field">
-              <label class="field" for="pago-numero"><span class="pay-label-row">Número de tarjeta <em id="pago-marca" class="pay-brand"></em></span>
-                <input id="pago-numero" type="text" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" aria-describedby="pago-numero-error"></label>
-              <p class="pay-error" id="pago-numero-error" hidden></p></div>
-            ${campoPago('pago-nombre', 'Nombre del titular', 'type="text" autocomplete="cc-name" placeholder="Como aparece en la tarjeta"')}
-            <div class="pay-row">
-              ${campoPago('pago-vence', 'Vencimiento', 'type="text" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/AA" maxlength="5"')}
-              ${campoPago('pago-cvc', 'CVC', 'type="text" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4"')}
-            </div>
-          </div>
-          <div id="pago-paypal" class="login-fields" hidden>
-            <p class="wall-note">Te llevaremos a PayPal para confirmar el pago.</p>
-          </div>
-          <p id="pago-error" class="login-message" role="alert" hidden></p>
-          <div class="wall-actions">
-            <button id="pago-submit" type="submit" class="primary-button">Pagar</button>
-            <button type="button" class="wall-close" data-cerrar>Ahora no</button>
-          </div>
-          <p id="pago-nota" class="wall-note">Pago de prueba: no se cobra nada. Solo se envían la marca y los últimos 4 dígitos.</p>
-        </form>`;
-      const form = pago.querySelector('form');
-      const error = pago.querySelector('#pago-error');
-      const boton = pago.querySelector('#pago-submit');
-      const numero = $('pago-numero'), nombre = $('pago-nombre'), vence = $('pago-vence'), cvc = $('pago-cvc');
-      const campos = [numero, nombre, vence, cvc];
-      let metodo = 'tarjeta';
-      let intentado = false;
-
-      const mostrarError = (campo, texto) => {
-        const el = $(`${campo.id}-error`);
-        el.textContent = texto;
-        el.hidden = !texto;
-        campo.setAttribute('aria-invalid', texto ? 'true' : 'false');
-        return texto;
-      };
-      const marcaActual = () => MARCAS[detectarMarca(soloDigitos(numero.value))];
-
-      const validadores = new Map([
-        [numero, () => {
-          const d = soloDigitos(numero.value);
-          const m = marcaActual();
-          if (!d) return 'Escribe el número de tu tarjeta.';
-          return d.length >= 8 ? '' : 'Escribe el número completo de tu tarjeta.';   // el backend valida el resto
-        }],
-        [nombre, () => (nombre.value.trim().length >= 1 ? '' : 'Escribe el nombre como aparece en la tarjeta.')],
-        [vence, () => {
-          const m = /^(\d{2})\/(\d{2})$/.exec(vence.value);
-          if (!m) return 'Escribe el vencimiento como MM/AA.';
-          const mes = Number(m[1]);
-          return mes >= 1 && mes <= 12 ? '' : 'El mes debe estar entre 01 y 12.';   // el backend revisa si esta vencida
-        }],
-        [cvc, () => {
-          const n = soloDigitos(cvc.value).length;
-          return n >= 3 && n <= 4 ? '' : 'El CVC tiene 3 o 4 dígitos.';
-        }],
-      ]);
-      const validar = (campo) => mostrarError(campo, validadores.get(campo)());
-
-      numero.addEventListener('input', () => {
-        const m = marcaActual();
-        numero.value = agrupar(soloDigitos(numero.value).slice(0, m.largo), m.grupos);
-        $('pago-marca').textContent = soloDigitos(numero.value) ? m.nombre : '';
-        cvc.maxLength = m.cvc;
-        if (soloDigitos(cvc.value).length > m.cvc) cvc.value = soloDigitos(cvc.value).slice(0, m.cvc);
-      });
-      vence.addEventListener('input', (event) => {
-        let d = soloDigitos(vence.value).slice(0, 4);
-        if (d.length && Number(d[0]) > 1) d = `0${d}`.slice(0, 4);   // "3" -> "03"
-        const borrando = event.inputType?.startsWith('delete');
-        vence.value = d.length > 2 || (d.length === 2 && !borrando) ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-      });
-      cvc.addEventListener('input', () => { cvc.value = soloDigitos(cvc.value).slice(0, marcaActual().cvc); });
-      for (const campo of campos) {
-        campo.addEventListener('blur', () => { if (intentado) validar(campo); });
-        campo.addEventListener('input', () => { if (intentado) validar(campo); });
-      }
-
-      // Selector Tarjeta / PayPal (radiogroup con flechas).
-      const opciones = [...pago.querySelectorAll('[data-metodo]')];
-      function elegirMetodo(nuevo, { enfocar = false } = {}) {
-        metodo = nuevo;
-        for (const op of opciones) {
-          const activa = op.dataset.metodo === nuevo;
-          op.setAttribute('aria-checked', String(activa));
-          op.tabIndex = activa ? 0 : -1;
-          if (activa && enfocar) op.focus();
-        }
-        $('pago-tarjeta').hidden = nuevo !== 'tarjeta';
-        $('pago-paypal').hidden = nuevo !== 'paypal';
-        $('pago-nota').hidden = nuevo !== 'tarjeta';
-        boton.textContent = nuevo === 'tarjeta' ? 'Pagar' : 'Continuar con PayPal';
-        error.hidden = true;
-      }
-      for (const op of opciones) {
-        op.addEventListener('click', () => elegirMetodo(op.dataset.metodo));
-        op.addEventListener('keydown', (event) => {
-          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-          event.preventDefault();
-          elegirMetodo(metodo === 'tarjeta' ? 'paypal' : 'tarjeta', { enfocar: true });
-        });
-      }
-
-      pago.reiniciar = () => {
-        form.reset();
-        intentado = false;
-        for (const campo of campos) mostrarError(campo, '');
-        $('pago-marca').textContent = '';
-        cvc.maxLength = 4;
-        elegirMetodo('tarjeta');
-      };
-
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        error.hidden = true;
-        let ruta, body;
-        if (metodo === 'tarjeta') {
-          intentado = true;
-          const invalido = campos.filter((campo) => validar(campo));
-          if (invalido.length) { invalido[0].focus(); return; }
-          ruta = '/suscripcion/pro';
-          body = { marca: marcaActual().nombre, ultimos4: soloDigitos(numero.value).slice(-4), renovacion_automatica: true };
-        } else {
-          ruta = '/suscripcion/paypal';
-          body = { renovacion_automatica: true };
-        }
-        boton.disabled = true;
-        try {
-          const r = await api(ruta, { method: 'POST', body });
-          if (metodo === 'paypal') {
-            if (typeof r?.url === 'string' && r.url) { location.href = r.url; return; }
-            throw new Error('No se pudo iniciar el pago con PayPal. Intenta de nuevo.');
-          }
-          form.reset();   // los datos de la tarjeta no se conservan
-          await refrescarCuenta();
-          pago.close();
-          avisarProActivo(r?.fin_periodo);
-        } catch (err) {
-          error.textContent = [404, 405, 501].includes(err.status) && metodo === 'paypal'
-            ? 'Pagar con PayPal todavía no está disponible. Por ahora usa tarjeta.'
-            : err.message;
-          error.hidden = false;
-          if (err.status === 409) {
-            refrescarCuenta();
-            avisar('No se pudo contratar', err.message);
-          }
-        } finally {
-          boton.disabled = false;
-        }
-      });
-    }
-    const pro = sesion.cuenta?.pro;
-    const precio = pro ? Number(pro.precio_mensual) : 99;
-    const dias = pro ? pro.dias_periodo : 30;
-    $('pago-text').textContent = `$${precio} MXN cada ${dias} días. Se renueva automáticamente; cancela cuando quieras.`;
-    pago.reiniciar();
-    pago.showModal();
-    $('pago-numero').focus();
+    avisar('Pro llega muy pronto', 'Estamos preparando los pagos. Mientras tanto tienes 15 audios gratis cada 30 días.');
   }
 
   function avisarProActivo(fin) {
@@ -385,17 +194,27 @@
     } catch { return ''; }
   }
 
-  // POST /suscripcion/cancelar: pasa al plan gratis desde ahora (el pago simulado no se devuelve).
+  // POST /suscripcion/cancelar: ya no se renueva; Pro sigue hasta el fin del periodo pagado.
+  // Cancelar no quita Pro de inmediato: sigue hasta el fin del periodo pagado y despues pasa a Gratis.
   async function cancelarPro() {
     if (sesion?.plan !== 'pro') return;
+    if (sesion.cuenta?.cancelar_al_final) { reanudarPro(); return; }
     const guardado = await guardadoGratis();
-    const frase = guardado ? `tus próximos audios se guardan ${guardado}` : 'tus próximos audios se guardan por menos tiempo';
+    const frase = guardado ? `tus próximos audios se guardarán ${guardado}` : 'tus próximos audios se guardarán por menos tiempo';
+    const hasta = fecha(sesion.cuenta?.fin_periodo);
     avisar('¿Cancelar el plan Pro?',
-      `Al cancelar, ya no se renovará y pasas al plan Gratis desde ahora: dejas de tener tus audios guardados una semana, ${frase} y vuelves a los límites gratis. Los trabajos que ya usaste en este periodo siguen contando. No se devuelve lo que pagaste.`,
+      `Ya no se renovará. Sigues con Pro hasta el ${hasta || 'fin de tu periodo'}, que ya pagaste. Después pasas al plan Gratis: ${frase} y vuelves a los límites gratis. Puedes cambiar de opinión antes de esa fecha.`,
       {
         confirmar: 'Cancelar Pro',
         onConfirm: async () => { await api('/suscripcion/cancelar', { method: 'POST' }); await refrescarCuenta(); },
       });
+  }
+
+  function reanudarPro() {
+    avisar('¿Seguir con Pro?', `Tu plan Pro se renovará el ${fecha(sesion.cuenta?.fin_periodo)} como siempre.`, {
+      confirmar: 'Seguir con Pro',
+      onConfirm: async () => { await api('/suscripcion/reanudar', { method: 'POST' }); await refrescarCuenta(); },
+    });
   }
 
   // ---------- Mis audios (solo Pro) ----------
@@ -448,15 +267,6 @@
     try {
       items = await api('/trabajos');
     } catch (err) {
-      if (err.status === 403) {
-        // El servidor aun no lista el historial de este plan (hoy solo Pro/admin): se dice claro, sin simular nada.
-        lista.replaceChildren(Object.assign(document.createElement('li'), { className: 'history-empty',
-          textContent: sesion.plan === 'gratis'
-            ? `Mis audios todavía no está disponible en el plan Gratis. Tu audio sigue en la pantalla de resultados durante ${guardado}.`
-            : err.message }));
-        refrescarCuenta();
-        return;
-      }
       lista.replaceChildren(Object.assign(document.createElement('li'), { className: 'history-empty', textContent: err.message }));
       return;
     }
@@ -583,14 +393,15 @@
         $('menu-email').textContent = sesion.email || '';
         $('menu-plan').textContent = admin
           ? (c ? `Administrador · sin límite de trabajos (${c.trabajos_usados} en este periodo)` : 'Administrador · sin límite de trabajos')
-          : `Plan ${NOMBRE_PLAN[sesion.plan]}`;
+          : `Plan ${NOMBRE_PLAN[sesion.plan]}${pro ? ' · audios ilimitados' : ''}`;
         // Plan de pago: estado segun el fin del periodo. Plan gratis: cuanto le queda del periodo.
         const estado = $('menu-state');
         const uso = $('menu-usage');
         const vigente = c?.fin_periodo ? new Date(c.fin_periodo) > new Date() : null;
         estado.hidden = admin || !(pro && vigente !== null);
         estado.dataset.activo = String(vigente === true);
-        estado.textContent = vigente ? 'Activo' : 'Vencido';
+        estado.textContent = !vigente ? 'Vencido' : c?.cancelar_al_final ? `Termina el ${fecha(c.fin_periodo)}` : 'Activo';
+        $('menu-cancel').textContent = c?.cancelar_al_final ? 'Seguir con Pro' : 'Cancelar plan Pro';
         uso.hidden = pro || admin || !c || c.trabajos_por_mes == null;
         if (!uso.hidden) {
           const quedan = Math.max(c.trabajos_por_mes - c.trabajos_usados, 0);
@@ -604,6 +415,10 @@
       for (const el of profileMenu.querySelectorAll('.menu-guest')) el.hidden = logged;
       for (const el of profileMenu.querySelectorAll('.menu-pro')) el.hidden = !pro;
       for (const el of profileMenu.querySelectorAll('.menu-free')) el.hidden = !logged || pro || admin;
+      const panel = $('menu-admin');
+      if (panel) panel.hidden = !admin;
+      const verificar = $('menu-verificar');
+      if (verificar) verificar.hidden = !logged || sesion.cuenta?.email_verificado !== false;
       profileButton.setAttribute('aria-label', logged ? `Cuenta de ${sesion.nombre || sesion.email}` : 'Cuenta');
       if (!menuHasItems()) closeMenu();
     }
@@ -665,6 +480,12 @@
     $('menu-audios').addEventListener('click', () => { misAudios(); });
     $('menu-cancel').addEventListener('click', () => { cancelarPro(); });
     $('menu-logout').addEventListener('click', () => { cerrarSesion(); });
+    $('menu-verificar')?.addEventListener('click', async () => {
+      try {
+        const res = await api('/auth/verificar/reenviar', { method: 'POST' });
+        avisar('Revisa tu correo', res?.mensaje || 'Te enviamos un enlace para confirmar tu correo.');
+      } catch (err) { avisar('No se pudo enviar', err.message); }
+    });
   }
 
   // ---------- Punto unico de cambio de estado ----------
@@ -699,20 +520,69 @@
     cancelarPro,
   });
 
-  // Regreso de PayPal: el servidor vuelve a "/#pago=paypal-ok" o "/#pago=paypal-cancelado".
-  if (location.hash === '#pago=paypal-ok' || location.hash === '#pago=paypal-cancelado') {
-    const ok = location.hash === '#pago=paypal-ok';
+  // Enlace del correo: "/#verificar=CODIGO" confirma el correo o guarda el correo nuevo.
+  // Tambien con la pagina ya abierta (hashchange): el enlace puede abrirse en la misma pestaña.
+  function revisarVerificacion() {
+    const verificar = /^#verificar=(.+)$/.exec(location.hash);
+    if (!verificar) return;
     history.replaceState(null, '', location.pathname + location.search);
-    if (ok) {
-      refrescarCuenta().then(() => {
-        if (sesion?.plan === 'pro' || sesion?.plan === 'admin') avisarProActivo(sesion?.cuenta?.fin_periodo);
-        else avisar('Confirmando tu pago', 'Todavía no vemos el cambio a Pro. Si se hizo el cargo, tu plan se actualizará en unos minutos.');
-      });
-    }
-    else avisar('Pago cancelado', 'No se hizo ningún cargo. Puedes intentarlo de nuevo cuando quieras.');
+    api('/auth/verificar', { method: 'POST', body: { codigo: verificar[1] } })
+      .then((res) => { avisar('Correo confirmado', res?.mensaje || 'Listo: tu correo quedó confirmado.'); refrescarCuenta(); })
+      .catch((err) => avisar('No se pudo confirmar', err.message));
   }
+  revisarVerificacion();
+  addEventListener('hashchange', revisarVerificacion);
 
-  // Regreso de Google/Facebook: el servidor vuelve a "/#sesion=TOKEN" o "/#error=MENSAJE".
+  // Google o Facebook en una cuenta con verificacion en dos pasos: "/#dos-pasos=PENDIENTE" pide el codigo.
+  function pedirCodigoSocial(pendiente) {
+    const dialogo = crearDialogo();
+    dialogo.innerHTML = `<form novalidate>
+        <h2>Verificación en dos pasos</h2>
+        <p>Escribe el código de 6 dígitos de tu app de autenticación, o uno de tus códigos de respaldo.</p>
+        <label class="field" for="social-codigo"><span>Código</span>
+          <input id="social-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" required></label>
+        <p class="login-message" role="alert" hidden></p>
+        <div class="wall-actions"><button type="submit" class="primary-button">Entrar</button><button type="button" class="wall-close" data-cerrar>Cancelar</button></div>
+      </form>`;
+    const form = dialogo.querySelector('form');
+    const input = dialogo.querySelector('input');
+    const error = dialogo.querySelector('[role="alert"]');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const boton = form.querySelector('[type="submit"]');
+      boton.disabled = true;
+      try {
+        const r = await api('/auth/social/dos-pasos', { method: 'POST', body: { pendiente, codigo: input.value.trim() }, token: 'nuevo' });
+        const token = r.sesion;
+        const cuenta = await api('/suscripcion', { token });
+        setSesion(desdeCuenta(token, cuenta));
+        dialogo.close();
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        input.focus();
+        input.select();
+      } finally { boton.disabled = false; }
+    });
+    dialogo.addEventListener('close', () => dialogo.remove());
+    dialogo.showModal();
+    input.focus();
+  }
+  function revisarRegresoSocial() {
+    const dos = /^#dos-pasos=(.+)$/.exec(location.hash);
+    if (dos) { history.replaceState(null, '', location.pathname + location.search); pedirCodigoSocial(dos[1]); }
+    const conectado = /^#conectado=(google|facebook)$/.exec(location.hash);
+    if (conectado) {
+      history.replaceState(null, '', location.pathname + location.search);
+      refrescarCuenta();
+      const red = conectado[1] === 'google' ? 'Google' : 'Facebook';
+      avisar(`${red} conectado`, `Desde ahora también puedes entrar con tu cuenta de ${red}.`);
+    }
+  }
+  revisarRegresoSocial();
+  addEventListener('hashchange', revisarRegresoSocial);
+
+  // Regreso de Google/Facebook: el servidor pone la cookie y vuelve a "/#sesion=ID" o "/#error=MENSAJE".
   const regreso = /^#(sesion|error)=(.+)$/.exec(location.hash);
   if (regreso) {
     history.replaceState(null, '', location.pathname + location.search);

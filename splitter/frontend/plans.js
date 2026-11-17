@@ -21,7 +21,8 @@
   }
 
   const caracteristicas = (plan) => [
-    `${plan.trabajos_por_mes} trabajos cada ${diasPeriodo} días`,
+    // trabajos_por_mes null = ilimitados
+    plan.trabajos_por_mes == null ? 'Audios ilimitados' : `${plan.trabajos_por_mes} audios cada ${diasPeriodo} días`,
     `Hasta ${plan.minutos_max_audio} minutos por audio`,
     plan.mejor_calidad ? 'Mejor calidad de separación' : 'Separación en calidad rápida',
     plan.historial ? `Tus audios se guardan ${guardado(plan.minutos_guardado)} en «Mis audios»` : `Tus audios se guardan ${guardado(plan.minutos_guardado)}`,
@@ -68,7 +69,7 @@
       note.className = 'plan-note';
       note.textContent = id === 'pro' && planActual === 'pro' && sesion.cuenta?.fin_periodo
         ? `Se renueva el ${fecha(sesion.cuenta.fin_periodo)}`
-        : precio > 0 ? `Se renueva automáticamente cada ${diasPeriodo} días` : '';
+        : precio > 0 ? 'Disponible muy pronto' : '';
       const list = document.createElement('ul');
       list.className = 'plan-features';
       for (const text of caracteristicas(plan)) {
@@ -88,8 +89,9 @@
         button.textContent = 'Tu plan actual';
         button.disabled = true;
       } else if (id === 'pro') {
-        button.textContent = 'Contratar Pro';
-        button.addEventListener('click', () => window.contratarPro());   // sin sesion, account.js muestra el muro
+        // Los pagos todavia no estan abiertos
+        button.textContent = 'Próximamente';
+        button.disabled = true;
       } else {
         button.textContent = 'Volver a Gratis';
         button.addEventListener('click', () => window.cancelarPro());

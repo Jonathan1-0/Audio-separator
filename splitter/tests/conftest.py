@@ -14,16 +14,42 @@ os.environ["SPLITTER_ENGINE"] = "fake"
 os.environ["SPLITTER_DATA_DIR"] = str(_TMP / "data")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP / 'pruebas.db'}"
 os.environ.pop("DB_SSL_CA", None)
+# Las pruebas crean muchas cuentas desde la misma IP; los límites se prueban aparte
+for _limite in ("LOGIN_POR_IP", "LOGIN_FALLOS_POR_CUENTA", "REGISTROS_POR_IP", "CORREOS_POR_CUENTA"):
+    os.environ[f"SPLITTER_{_limite}"] = "100000"
+# Vacía (no borrada): si se borra, load_dotenv la vuelve a tomar de .env y las pruebas mandarían correos reales
+os.environ["SPLITTER_SMTP_USER"] = ""
+os.environ["SPLITTER_SMTP_PASSWORD"] = ""
+# Igual con las claves de Google y Facebook de .env: las pruebas usan las suyas
+for _clave in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET", "CONTACTO_EMAIL", "PUBLIC_URL"):
+    os.environ[f"SPLITTER_{_clave}"] = ""
+os.environ.pop("SPLITTER_SENTRY_DSN", None)
+# Cuenta de administrador de prueba (no la de .env)
+os.environ["SPLITTER_ADMIN_EMAIL"] = "admin@pruebas.com"
+os.environ["SPLITTER_ADMIN_PASSWORD"] = "admin-pruebas-1"
+# Las pruebas usan el pago simulado para probar Pro
+os.environ["SPLITTER_PAGOS_SIMULADOS"] = "1"
+# El panel pide dos pasos; se prueba aparte (test_cuenta_segura.py)
+os.environ["SPLITTER_ADMIN_REQUIERE_DOS_PASOS"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
 
 
+class _Cliente(TestClient):
+    """No guarda la cookie de sesión entre peticiones: cada prueba dice con qué cuenta entra
+    (Authorization o la cookie a mano). Las demás cookies (estado de Google) sí se guardan."""
+
+    def request(self, *args, **kwargs):
+        self.cookies.delete("splitter_sesion")
+        return super().request(*args, **kwargs)
+
+
 @pytest.fixture(scope="session")
 def cliente():
     """Cliente de pruebas; al entrar arranca la app."""
-    with TestClient(app) as c:
+    with _Cliente(app) as c:
         yield c
 
 

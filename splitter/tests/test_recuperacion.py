@@ -13,7 +13,11 @@ PASSWORD = "clave-segura-1"
 def buzon(monkeypatch):
     """Guarda los correos en una lista en vez de enviarlos."""
     recibidos = []
-    monkeypatch.setattr(correo, "enviar", lambda destino, asunto, texto: recibidos.append((destino, texto)))
+    def guardar(destino, asunto, texto, cuerpo_html=None):
+        if "#restablecer=" in texto:  # solo los de recuperación (también llegan los de bienvenida)
+            recibidos.append((destino, texto))
+
+    monkeypatch.setattr(correo, "enviar", guardar)
     monkeypatch.setattr(recuperacion._por_ip, "max_events", 0)  # sin límite por IP
     return recibidos
 
@@ -68,7 +72,7 @@ def test_el_enlace_solo_sirve_una_vez(cliente, buzon):
 
 def test_cambiar_password_cierra_las_sesiones(cliente, buzon):
     email = _cuenta_nueva(cliente)
-    cabecera = {"Authorization": f"Bearer {_login(cliente, email, PASSWORD).json()['token']}"}
+    cabecera = {"Authorization": f"Bearer {_login(cliente, email, PASSWORD).cookies['splitter_sesion']}"}
     cliente.post("/auth/recuperar", json={"email": email})
     cliente.post("/auth/restablecer", json={"codigo": _codigo_del_correo(buzon[0][1]), "password": "otra-clave-22"})
     assert cliente.get("/suscripcion", headers=cabecera).status_code == 401

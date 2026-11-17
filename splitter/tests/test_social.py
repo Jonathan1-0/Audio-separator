@@ -57,7 +57,8 @@ def test_entrar_crea_la_cuenta_y_abre_sesion(cliente, proveedor_falso, proveedor
     estado, _ = _empezar(cliente, proveedor)
     res = _regresar(cliente, proveedor, estado)
     assert res.headers["location"].startswith("/#sesion=")
-    token = res.headers["location"].split("=", 1)[1]
+    token = res.cookies["splitter_sesion"]
+    assert token not in res.headers["location"]
     cuenta = cliente.get("/suscripcion", headers={"Authorization": f"Bearer {token}"})
     assert cuenta.status_code == 200
     assert cuenta.json()["email"] == proveedor_falso["email"]
@@ -68,7 +69,7 @@ def test_entrar_dos_veces_usa_la_misma_cuenta(cliente, proveedor_falso):
     correos = []
     for _ in range(2):
         estado, _ = _empezar(cliente, "google")
-        token = _regresar(cliente, "google", estado).headers["location"].split("=", 1)[1]
+        token = _regresar(cliente, "google", estado).cookies["splitter_sesion"]
         correos.append(cliente.get("/suscripcion", headers={"Authorization": f"Bearer {token}"}).json()["email"])
     assert correos[0] == correos[1]
 

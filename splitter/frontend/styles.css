@@ -95,6 +95,9 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .social-divider { display: flex; align-items: center; gap: 16px; margin: 0; color: var(--text-2); font-size: 14px; }
 .social-divider::before, .social-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .social-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* Con un solo proveedor (el otro oculto): el boton queda centrado, del mismo ancho que con dos. */
+.social-row:has(> .social-button[hidden]) { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.social-row:has(> .social-button[hidden]) .social-button { width: calc(50% - 5px); min-width: 200px; }
 .social-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font-size: 15px; font-weight: 500; }
 .social-button:hover { background: var(--panel-hover); }
 .social-button svg { flex-shrink: 0; }
@@ -175,6 +178,10 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 /* Con vidrio (glass.js), el borde punteado lo sustituye el canto del vidrio; al arrastrar vuelve el borde azul. */
 .dropzone.has-glass { border-color: transparent; }
 .dropzone.is-dragover { border-color: var(--accent); }
+/* Todo el recuadro abre el selector mientras no hay archivo: se nota al pasar el mouse. */
+.dropzone:has(#upload-prompt:not([hidden])) { cursor: pointer; transition: background-color 200ms var(--ease); }
+.dropzone:has(#upload-prompt:not([hidden])):hover { background-color: color-mix(in srgb, var(--text) 3%, transparent); }
+.dropzone:has(#upload-prompt:not([hidden])):hover .file-picker { text-decoration: underline; text-underline-offset: 6px; }
 .upload-prompt > p:first-child { margin: 0; font-size: clamp(20px, 2.2vw, 26px); font-weight: 500; line-height: 1.25; letter-spacing: -.01em; text-wrap: balance; }
 .file-picker { color: var(--accent); display: inline; }
 .file-picker:hover { text-decoration: underline; text-underline-offset: 6px; }
@@ -541,3 +548,22 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 @keyframes panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 html.restore-in :is(#results-panel, #job-panel) { animation: panel-in 400ms var(--ease) both; }
 @media (prefers-reduced-motion: reduce) { html.restore-in :is(#results-panel, #job-panel) { animation: none; } }
+
+/* Perfil: acciones de la cuenta y borrar */
+.profile-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.text-button-danger { color: #ff6b6b; }
+.text-button-danger:hover { color: #ff8f8f; }
+.profile-warning { margin: 0 0 18px; color: var(--text-2); line-height: 1.5; }
+.menu-verify { color: #ffd479; }
+
+/* Pie con enlaces legales (todas las páginas) */
+.pie-legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; padding: 22px 16px 28px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 14px; }
+.pie-legal a { color: var(--text-2); text-decoration: none; }
+.pie-legal a:hover { color: var(--text); text-decoration: underline; }
+
+/* Perfil: verificacion en dos pasos */
+.profile-row-action { min-height: 40px; padding: 6px 10px; font-size: 15px; }
+.dos-qr { display: flex; justify-content: center; margin: 4px 0 14px; }
+.dos-qr img { width: 200px; height: 200px; padding: 10px; border-radius: 16px; background: #fff; }
+.dos-secreto { margin: 0 0 18px; color: var(--text); font: 600 16px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-align: center; word-break: break-all; }
+.dos-respaldo { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; margin: 4px 0 16px; padding: 16px 16px 16px 36px; border-radius: 16px; background: var(--bg); color: var(--text); font: 600 16px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -1,13 +1,11 @@
 """Pago simulado del plan pro."""
 import secrets
-from datetime import timedelta
 
 from fastapi import HTTPException
 
-from .. import config
 from ..database import SessionLocal, ahora_utc
 from ..repositories import suscripciones as repo_suscripciones
-from .cuotas import suscripcion_vigente
+from .cuotas import fin_de_periodo, suscripcion_vigente
 
 
 def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
@@ -29,7 +27,7 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
         actual.estado = "cancelada"
         db.flush()
         inicio = ahora_utc()
-        fin = inicio + timedelta(days=config.DIAS_PERIODO)
+        fin = fin_de_periodo(inicio)
         nueva = repo_suscripciones.crear_suscripcion(db, usuario_id, plan, inicio, fin)
         metodo = repo_suscripciones.crear_metodo_pago(
             db, usuario_id, marca, ultimos4, f"tok_sim_{secrets.token_hex(16)}"
@@ -47,16 +45,24 @@ def contratar_pro(usuario_id: int, marca: str, ultimos4: str) -> dict:
 
 
 def cancelar_pro(usuario_id: int) -> dict:
-    """Pasa al usuario al plan gratis desde ahora."""
+    """Cancela la renovación: sigue con Pro hasta fin_periodo (ya lo pagó) y después pasa a gratis."""
     with SessionLocal() as db:
         actual = suscripcion_vigente(db, usuario_id)
         if actual.plan.nombre != "pro":
             raise HTTPException(409, "No tienes el plan pro.")
-        actual.estado = "cancelada"
-        db.flush()
-        gratis = repo_suscripciones.buscar_plan(db, "gratis")
-        nueva = repo_suscripciones.crear_suscripcion(
-            db, usuario_id, gratis, actual.inicio_periodo, actual.fin_periodo
-        )
+        if actual.cancelar_al_final:
+            raise HTTPException(409, f"Ya lo cancelaste: sigues con Pro hasta el {actual.fin_periodo:%d/%m/%Y}.")
+        actual.cancelar_al_final = True
         db.commit()
-        return {"plan": "gratis", "fin_periodo": f"{nueva.fin_periodo.isoformat()}Z"}
+        return {"plan": "pro", "cancelar_al_final": True, "fin_periodo": f"{actual.fin_periodo.isoformat()}Z"}
+
+
+def reanudar_pro(usuario_id: int) -> dict:
+    """Deshace la cancelación mientras el periodo sigue vigente."""
+    with SessionLocal() as db:
+        actual = suscripcion_vigente(db, usuario_id)
+        if actual.plan.nombre != "pro" or not actual.cancelar_al_final:
+            raise HTTPException(409, "No hay una cancelación que deshacer.")
+        actual.cancelar_al_final = False
+        db.commit()
+        return {"plan": "pro", "cancelar_al_final": False, "fin_periodo": f"{actual.fin_periodo.isoformat()}Z"}

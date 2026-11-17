@@ -4,7 +4,10 @@ uvicorn[standard]
 python-multipart
 modal
 sqlalchemy
+alembic
 pymysql
 cryptography
 bcrypt
 python-dotenv
+sentry-sdk
+qrcode

@@ -38,6 +38,27 @@ class RateLimiter:
             self._save()
             return 0.0
 
+    def espera(self, key: str) -> float:
+        """Como acquire, pero sin contar un evento: 0 si hay lugar."""
+        if self.max_events <= 0:
+            return 0.0
+        now = time.time()
+        with self._lock:
+            events = self._events.get(key)
+            if not events:
+                return 0.0
+            while events and now - events[0] >= self.window:
+                events.popleft()
+            if len(events) >= self.max_events:
+                return min(self.window, self.window - (now - events[0]))
+            return 0.0
+
+    def limpiar(self, key: str) -> None:
+        """Olvida los eventos de esa clave."""
+        with self._lock:
+            if self._events.pop(key, None) is not None:
+                self._save()
+
     def release(self, key: str) -> None:
         """Deshace la última reserva."""
         if self.max_events <= 0:

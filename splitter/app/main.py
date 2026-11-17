@@ -20,24 +20,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, media
+from . import config, enlaces, media
 from .dependencies import usuario_opcional
 from .engine import build_engine
 from .jobs import DONE, ERROR, Job, JobManager
+from .mantenimiento import Mantenimiento, limpiar_base
 from .models.tablas import Usuario
 from .ratelimit import RateLimiter
+from .routes import admin as rutas_admin
 from .routes import auth as rutas_auth
 from .routes import social as rutas_social
 from .routes import suscripcion as rutas_suscripcion
 from .routes import trabajos as rutas_trabajos
 from .seed import preparar_base
+from .seguridad import CabecerasSeguridad
 from .services import cuotas, invitados
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+from .registro import preparar_registro  # noqa: E402
+
+preparar_registro()
 log = logging.getLogger("splitter.api")
 
 engine = build_engine()
 manager = JobManager(engine)
+mantenimiento = Mantenimiento()
 # Tope de trabajos al día entre todos
 daily_limiter = RateLimiter(config.MAX_JOBS_PER_DAY, 24 * 3600, config.DATA_DIR / "limite_dia.json")
 ALL_USERS = "todos"
@@ -45,24 +51,34 @@ ALL_USERS = "todos"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not config.SECRET_KEY:
+        log.warning("Falta SPLITTER_SECRET_KEY en .env: los enlaces de correo y de descarga dejan de servir al reiniciar")
     preparar_base()
+    await run_in_threadpool(limpiar_base)
     manager.start()
+    mantenimiento.start()
     log.info("Splitter listo — motor: %s", engine.device_info())
     yield
     manager.stop()
+    mantenimiento.stop()
 
 
 app = FastAPI(title="Splitter API", version="1.0.0", lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=config.ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["*"],
-)
+app.state.manager = manager
+if config.ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.ALLOWED_ORIGINS,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+_frontend = os.getenv("SPLITTER_FRONTEND_DIR") or str(Path(__file__).resolve().parent.parent / "frontend")
+app.add_middleware(CabecerasSeguridad, carpeta_front=Path(_frontend))
 app.include_router(rutas_auth.router)
 app.include_router(rutas_social.router)
 app.include_router(rutas_suscripcion.router)
 app.include_router(rutas_trabajos.router)
+app.include_router(rutas_admin.router)
 
 
 # Utilidades
@@ -87,6 +103,18 @@ def _job_del_solicitante(job_id: str, usuario: Optional[Usuario]) -> Job:
     return job
 
 
+def _job_para_archivo(job_id: str, firma: str, usuario: Optional[Usuario]) -> Job:
+    """Eventos, vista previa y descargas: el dueño (por token o por enlace firmado)."""
+    job = _job_or_404(job_id)
+    if job.usuario_id is None:
+        return job
+    if usuario is not None and usuario.id == job.usuario_id:
+        return job
+    if enlaces.firma_valida(job_id, firma):
+        return job
+    raise HTTPException(404, "Ese trabajo no existe o ya expiró.")
+
+
 def _public(job: Job) -> dict:
     data = {
         "id": job.id,
@@ -98,17 +126,18 @@ def _public(job: Job) -> dict:
         "preset": job.preset,
         "queue_position": manager.queue_position(job.id),
         "phase": job.phase,
+        "events_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/events"),
     }
     if job.status == DONE:
         data["stems"] = [
             {
                 "name": stem,
-                "preview_url": f"/api/jobs/{job.id}/stems/{stem}/preview",
-                "download_url": f"/api/jobs/{job.id}/stems/{stem}/download",
+                "preview_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/stems/{stem}/preview"),
+                "download_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/stems/{stem}/download"),
             }
             for stem in job.stem_files
         ]
-        data["download_all_url"] = f"/api/jobs/{job.id}/download"
+        data["download_all_url"] = enlaces.firmar(job.id, f"/api/jobs/{job.id}/download")
         expira = job.expires_at or (job.finished_at or time.time()) + config.JOB_TTL_MINUTES * 60
         data["expires_in_minutes"] = max(0, round((expira - time.time()) / 60))
         data["expires_at"] = datetime.fromtimestamp(expira, timezone.utc).isoformat().replace("+00:00", "Z")
@@ -273,9 +302,11 @@ def job_status(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
 
 
 @app.get("/api/jobs/{job_id}/events")
-async def job_events(job_id: str, request: Request):
+async def job_events(
+    job_id: str, request: Request, firma: str = "", usuario: Optional[Usuario] = Depends(usuario_opcional)
+):
     """Manda el trabajo cada vez que cambia (SSE)."""
-    await run_in_threadpool(_job_or_404, job_id)
+    await run_in_threadpool(_job_para_archivo, job_id, firma, usuario)
 
     async def stream():
         last_version = -1
@@ -309,9 +340,11 @@ async def job_events(job_id: str, request: Request):
 
 # Vista previa y descargas
 @app.get("/api/jobs/{job_id}/stems/{stem}/preview")
-async def stem_preview(job_id: str, stem: str):
+async def stem_preview(
+    job_id: str, stem: str, firma: str = "", usuario: Optional[Usuario] = Depends(usuario_opcional)
+):
     """MP3 ligero para escuchar en la página."""
-    job = await run_in_threadpool(_job_or_404, job_id)
+    job = await run_in_threadpool(_job_para_archivo, job_id, firma, usuario)
     path = _stem_path(job, stem)
     try:
         mp3 = await run_in_threadpool(media.convert, path, "mp3", preview=True)
@@ -322,8 +355,15 @@ async def stem_preview(job_id: str, stem: str):
 
 # Con prepare=1 solo convierte y deja el archivo listo
 @app.get("/api/jobs/{job_id}/stems/{stem}/download")
-async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bool = False):
-    job = await run_in_threadpool(_job_or_404, job_id)
+async def stem_download(
+    job_id: str,
+    stem: str,
+    format: str = "wav",
+    prepare: bool = False,
+    firma: str = "",
+    usuario: Optional[Usuario] = Depends(usuario_opcional),
+):
+    job = await run_in_threadpool(_job_para_archivo, job_id, firma, usuario)
     fmt = _check_format(format)
     path = _stem_path(job, stem)
     try:
@@ -340,8 +380,14 @@ async def stem_download(job_id: str, stem: str, format: str = "wav", prepare: bo
 
 
 @app.get("/api/jobs/{job_id}/download")
-async def download_all(job_id: str, format: str = "wav", prepare: bool = False):
-    job = await run_in_threadpool(_job_or_404, job_id)
+async def download_all(
+    job_id: str,
+    format: str = "wav",
+    prepare: bool = False,
+    firma: str = "",
+    usuario: Optional[Usuario] = Depends(usuario_opcional),
+):
+    job = await run_in_threadpool(_job_para_archivo, job_id, firma, usuario)
     fmt = _check_format(format)
     if job.status != DONE:
         raise HTTPException(409, "El trabajo todavía no termina.")
@@ -361,6 +407,5 @@ def delete_job(job_id: str, usuario: Optional[Usuario] = Depends(usuario_opciona
 
 
 # La página
-_frontend = os.getenv("SPLITTER_FRONTEND_DIR") or str(Path(__file__).resolve().parent.parent / "frontend")
 if Path(_frontend).is_dir():
     app.mount("/", StaticFiles(directory=_frontend, html=True), name="frontend")

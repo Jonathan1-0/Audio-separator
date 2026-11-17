@@ -1,0 +1,41 @@
+# Levantar Splitter igual en cualquier máquina:
+#   docker compose up --build
+# Usa la base de .env (DATABASE_URL). Para probar con una base local en MySQL:
+#   docker compose --profile local up --build
+# y en .env: DATABASE_URL=mysql+pymysql://splitter:splitter@mysql:3306/splitter
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      # Las claves de Modal (modal token new) para usar la GPU
+      MODAL_TOKEN_ID: ${MODAL_TOKEN_ID:-}
+      MODAL_TOKEN_SECRET: ${MODAL_TOKEN_SECRET:-}
+      # Dentro del contenedor el certificado de Aiven siempre está en /app/ca.pem
+      DB_SSL_CA: ${DB_SSL_CA:+ca.pem}
+    ports:
+      - "8000:8000"
+    volumes:
+      - datos:/app/data
+      # Certificado de Aiven: ruta en tu máquina (CA_PEM=/home/tú/certs/ca.pem)
+      - ${CA_PEM:-./ca.pem}:/app/ca.pem:ro
+    restart: unless-stopped
+
+  mysql:
+    profiles: ["local"]
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: splitter
+      MYSQL_USER: splitter
+      MYSQL_PASSWORD: splitter
+      MYSQL_ROOT_PASSWORD: splitter-root
+    volumes:
+      - mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 5s
+      retries: 20
+
+volumes:
+  datos:
+  mysql:

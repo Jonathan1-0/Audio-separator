@@ -1,10 +1,10 @@
-"""Historial de trabajos ("Mis audios"), solo plan pro."""
+"""Historial de trabajos ("Mis audios")."""
 from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import HTTPException
 
-from .. import config
+from .. import config, enlaces
 from ..database import SessionLocal, ahora_utc
 from ..repositories import trabajos as repo_trabajos
 from .cuotas import minutos_guardado, plan_vigente
@@ -16,12 +16,12 @@ def _fecha(valor: Optional[datetime]) -> Optional[str]:
 
 
 def historial(usuario_id: int) -> List[dict]:
-    """Trabajos de la última semana."""
+    """Trabajos que el plan todavía guarda (gratis: 1 hora; pro: 1 semana)."""
     ahora = ahora_utc()
     with SessionLocal() as db:
         plan = plan_vigente(db, usuario_id)
         if plan not in config.PLANES_CON_HISTORIAL:
-            raise HTTPException(403, "El historial de tus audios es del plan Pro.")
+            raise HTTPException(403, "Tu plan no tiene historial de audios.")
         desde = ahora - timedelta(minutes=minutos_guardado(plan))
         trabajos = repo_trabajos.listar_por_usuario(db, usuario_id, desde)
         return [
@@ -43,7 +43,7 @@ def historial(usuario_id: int) -> List[dict]:
                         "stem": r.stem,
                         "expira_en": _fecha(r.expira_en),
                         "disponible": r.expira_en > ahora,
-                        "download_url": f"/api/jobs/{t.id}/stems/{r.stem}/download",
+                        "download_url": enlaces.firmar(t.id, f"/api/jobs/{t.id}/stems/{r.stem}/download"),
                     }
                     for r in t.resultados
                 ],
