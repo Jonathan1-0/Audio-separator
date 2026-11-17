@@ -13,6 +13,10 @@ def _ultimo_enlace(servidor, ancla: str) -> str:
     return re.findall(rf"/#{ancla}=\S+", texto)[-1]
 
 
+def _ultimo_codigo(servidor) -> str:
+    return re.findall(r"Tu código de Splitter: (\d{6})", servidor["log"].read_text())[-1]
+
+
 def _registrarse(pagina, email):
     pagina.goto("/")
     pagina.get_by_role("button", name="Regístrate").click()
@@ -21,6 +25,11 @@ def _registrarse(pagina, email):
     pagina.locator("#login-password").fill(PASSWORD)
     pagina.locator("#login-confirm").fill(PASSWORD)
     pagina.get_by_role("button", name="Crear cuenta").click()
+    # Llega un código al correo (en las pruebas se escribe en el log del servidor)
+    expect(pagina.locator("#code-field")).to_be_visible()
+    expect(pagina.locator("#login-message")).to_contain_text("Te enviamos un código")
+    pagina.locator("#login-code").fill(_ultimo_codigo(pagina.servidor))
+    pagina.locator("#login-submit").click()
     expect(pagina.locator("#login-dialog")).not_to_be_visible()
 
 
@@ -29,7 +38,7 @@ def _abrir_menu(pagina):
     expect(pagina.locator("#profile-menu")).to_be_visible()
 
 
-def test_registro_confirmar_correo_y_separar(pagina, servidor, audio_wav):
+def test_registro_con_codigo_y_separar(pagina, servidor, audio_wav):
     email = f"e2e_{uuid.uuid4().hex[:8]}@ejemplo.test"
     _registrarse(pagina, email)
 
@@ -40,13 +49,7 @@ def test_registro_confirmar_correo_y_separar(pagina, servidor, audio_wav):
 
     _abrir_menu(pagina)
     expect(pagina.locator("#menu-email")).to_have_text(email)
-    expect(pagina.locator("#menu-verificar")).to_be_visible()
-
-    # Abrir el enlace del correo confirma la cuenta
-    pagina.goto(_ultimo_enlace(servidor, "verificar"))
-    expect(pagina.get_by_role("heading", name="Correo confirmado")).to_be_visible()
-    pagina.get_by_role("button", name="Entendido").click()
-    _abrir_menu(pagina)
+    # El código del registro ya confirmó el correo: no aparece el aviso de confirmarlo
     expect(pagina.locator("#menu-verificar")).to_be_hidden()
     pagina.keyboard.press("Escape")
 
@@ -65,31 +68,23 @@ def test_registro_confirmar_correo_y_separar(pagina, servidor, audio_wav):
     expect(pagina.get_by_role("dialog", name="Mis audios").get_by_text("tono", exact=True)).to_be_visible()
 
 
-def _ultimo_codigo(servidor) -> str:
-    return re.findall(r"Tu código de Splitter: (\d{6})", servidor["log"].read_text())[-1]
-
-
-def test_dos_pasos_desde_el_perfil(pagina, servidor):
-    email = f"e2e2fa_{uuid.uuid4().hex[:8]}@ejemplo.test"
-    _registrarse(pagina, email)
-    _abrir_menu(pagina)
-    pagina.locator("#menu-profile").click()
-    pagina.locator("#boton-dos-pasos").click()
-    expect(pagina.locator("#dos-explicacion")).to_contain_text("acabamos de enviar")
-    pagina.locator("#dos-codigo").fill(_ultimo_codigo(servidor))
-    pagina.locator("#dos-guardar").click()
-    expect(pagina.locator("#valor-dos-pasos")).to_have_text("Activada")
-    pagina.keyboard.press("Escape")
-
-    # Al volver a entrar se pide el código que llega al correo
-    _abrir_menu(pagina)
-    pagina.locator("#menu-logout").click()
+def test_cuenta_sin_confirmar_pide_el_codigo_al_entrar(pagina, servidor):
+    email = f"e2epend_{uuid.uuid4().hex[:8]}@ejemplo.test"
+    pagina.goto("/")
+    pagina.get_by_role("button", name="Regístrate").click()
+    pagina.get_by_label("Nombre").fill("Pendiente E2E")
+    pagina.locator("#login-email").fill(email)
+    pagina.locator("#login-password").fill(PASSWORD)
+    pagina.locator("#login-confirm").fill(PASSWORD)
+    pagina.get_by_role("button", name="Crear cuenta").click()
+    expect(pagina.locator("#code-field")).to_be_visible()
+    # Cierra sin escribir el código y luego intenta entrar
+    pagina.reload()
     pagina.get_by_role("button", name="Inicia sesión").click()
     pagina.locator("#login-email").fill(email)
     pagina.locator("#login-password").fill(PASSWORD)
     pagina.locator("#login-submit").click()
     expect(pagina.locator("#code-field")).to_be_visible()
-    expect(pagina.locator("#login-message")).to_contain_text("Te enviamos un código")
     pagina.locator("#login-code").fill(_ultimo_codigo(servidor))
     pagina.locator("#login-submit").click()
     expect(pagina.locator("#login-dialog")).not_to_be_visible()

@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from .. import config
 from ..dependencies import usuario_actual
 from ..models.tablas import Usuario
 from ..services import admin
@@ -14,8 +13,6 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def solo_admin(usuario: Usuario = Depends(usuario_actual)) -> Usuario:
     if not admin.es_admin(usuario.id):
         raise HTTPException(403, "Solo la cuenta de administrador puede ver esto.")
-    if config.ADMIN_REQUIERE_DOS_PASOS and not usuario.totp_activo:
-        raise HTTPException(403, "Activa la verificación en dos pasos en tu perfil para usar el panel.")
     return usuario
 
 

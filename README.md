@@ -83,11 +83,11 @@ Todas las demás opciones están comentadas en `app/config.py`.
 - **Content-Security-Policy** estricta: solo corren los scripts propios, el CDN de `motion` y los scripts en línea de los HTML (por su hash, calculado al arrancar).
 - **Límites** de intentos de inicio de sesión, registros y correos.
 - **Descargas firmadas**: las pistas de una cuenta solo se escuchan o descargan con la sesión del dueño o con el enlace firmado que la API le da a él.
-- **Correo confirmado** antes de contratar Pro, y para cambiar el correo de la cuenta.
+- **Correo confirmado** al crear la cuenta, antes de contratar Pro y para cambiar el correo de la cuenta.
 - Avisos por correo al cambiar la contraseña o el correo, cerrar sesión en todos los dispositivos y borrar la cuenta.
 - Facebook no confirma los correos: solo puede entrar a cuentas que se crearon con Facebook.
 - **Google se conecta de forma explícita**: una cuenta creada con contraseña no se abre con Google solo porque el correo coincida; hay que entrar con la contraseña y conectar Google desde el perfil. Las cuentas se reconocen por el identificador de Google, no por el correo.
-- **Verificación en dos pasos por correo**: al iniciar sesión (con contraseña o con Google) se envía un código de 6 dígitos que vence en 10 minutos; sirve una sola vez y hay límite de intentos y de envíos. El panel de administración la exige (`SPLITTER_ADMIN_REQUIERE_DOS_PASOS=0` para quitarlo).
+- **Código por correo al crear la cuenta**: la cuenta queda pendiente hasta escribir el código de 6 dígitos (vence en 10 minutos, sirve una vez, con límite de intentos y de envíos). Los registros sin confirmar se borran a los 7 días. Al iniciar sesión no se pide código.
 - Los límites de intentos se guardan en `data/` y no se reinician al reiniciar el servidor.
 
 ## Base de datos
@@ -121,7 +121,7 @@ Respaldo propio (además de los de Aiven):
 ```bash
 cd splitter
 .venv/bin/pytest -q                 # backend (rápidas)
-.venv/bin/pytest e2e                # en un navegador real con Playwright: registro, separación, dos pasos…
+.venv/bin/pytest e2e                # en un navegador real con Playwright: registro con código, separación, descargas…
 .venv/bin/ruff check app migraciones scripts tests e2e --select F,E9
 ```
 

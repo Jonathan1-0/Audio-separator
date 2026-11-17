@@ -9,12 +9,12 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
   // Etiquetas en espanol; los ids viajan en ingles al backend.
-  const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', other: 'Otros instrumentos', voice: 'Voz' };
+  const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', guitar: 'Guitarra', piano: 'Piano', other: 'Otros instrumentos', voice: 'Voz' };
   const stemLabel = (id) => STEM_LABELS[id] || id;
   // Pistas elegibles por modo (clean tiene una sola pista: no hay nada que elegir).
   const trackDefinitions = {
     vocals: ['vocals', 'instrumental'],
-    instruments: ['vocals', 'drums', 'bass', 'other'],
+    instruments: ['vocals', 'drums', 'bass', 'guitar', 'piano', 'other'],
   };
   const selectedTracks = Object.fromEntries(Object.entries(trackDefinitions).map(([key, ids]) => [key, new Set(ids)]));
   // El backend no conoce los modos de la pagina: se traducen a presets.
@@ -1054,7 +1054,7 @@
   (async () => {
     // Llegada desde el logo de otra pagina (index.html#inicio): siempre al inicio.
     if (location.hash === '#inicio') { forgetJobId(); history.replaceState(null, '', location.pathname + location.search); }
-    const id = /#(restablecer|sesion|error|verificar|dos-pasos|conectado)=/.test(location.hash) ? '' : savedJobId();   // esos hash los manejan otros scripts
+    const id = /#(restablecer|sesion|error|verificar|conectado)=/.test(location.hash) ? '' : savedJobId();   // esos hash los manejan otros scripts
     if (!id) { reveal(); return; }
     const safety = setTimeout(reveal, 2500);   // nunca dejar el contenido oculto
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // si no, el navegador pisa el scroll

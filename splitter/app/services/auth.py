@@ -40,7 +40,11 @@ def _validar_datos(email: str, nombre: str, password: str) -> None:
 
 
 def registrar(email: str, nombre: str, password: str, ip: str = "") -> Usuario:
-    """Crea el usuario con el plan gratis."""
+    """Crea la cuenta "pendiente": se activa al escribir el código que llega al correo.
+
+    Si ya había un registro pendiente con ese correo (nunca se confirmó), se reemplaza:
+    así nadie puede apartar un correo ajeno registrándose sin confirmarlo.
+    """
     email, nombre = email.strip().lower(), nombre.strip()
     _validar_datos(email, nombre, password)
     espera = _registros_por_ip.acquire(ip)
@@ -48,11 +52,16 @@ def registrar(email: str, nombre: str, password: str, ip: str = "") -> Usuario:
         raise HTTPException(429, f"Se crearon demasiadas cuentas desde tu red. Intenta en {_minutos(espera)}.")
     password_hash = crear_hash(password)
     with SessionLocal() as db:
-        if repo_usuarios.buscar_por_email(db, email) is not None:
+        usuario = repo_usuarios.buscar_por_email(db, email)
+        if usuario is not None and usuario.estado != "pendiente":
             raise HTTPException(409, "Ya existe una cuenta con ese email.")
         try:
-            usuario = repo_usuarios.crear(db, email, nombre, password_hash)
-            crear_periodo_gratis(db, usuario.id)
+            if usuario is None:
+                usuario = repo_usuarios.crear(db, email, nombre, password_hash)
+                crear_periodo_gratis(db, usuario.id)
+            else:
+                usuario.nombre, usuario.password_hash = nombre, password_hash
+            usuario.estado = "pendiente"
             db.commit()
         except IntegrityError:  # correo repetido
             db.rollback()
@@ -60,14 +69,55 @@ def registrar(email: str, nombre: str, password: str, ip: str = "") -> Usuario:
     return usuario
 
 
-CABECERA_DOS_PASOS = {"X-Splitter-Dos-Pasos": "requerido"}
+CABECERA_CONFIRMAR = "X-Splitter-Confirmar"
 
 
 def password_correcta(usuario: Usuario, password: str) -> bool:
     return len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(password.encode(), usuario.password_hash.encode())
 
 
-def login(email: str, password: str, ip: str = "", codigo: str = "", pendiente: str = "") -> dict:
+def pedir_confirmacion(usuario: Usuario) -> dict:
+    """Envía el código para confirmar la cuenta y lo que la página necesita para pedirlo."""
+    from . import codigos  # aquí: codigos usa este módulo de forma indirecta
+
+    oculto = codigos.correo_oculto(usuario.email)
+    return {
+        "pendiente": codigos.enviar_codigo(usuario),
+        "correo": oculto,
+        "mensaje": f"Te enviamos un código de 6 dígitos a {oculto}.",
+    }
+
+
+def confirmar_registro(pendiente: str, codigo: str) -> dict:
+    """Con el código correcto la cuenta queda activa y se abre la sesión."""
+    from . import codigos
+
+    inicio = (pendiente or "").split(".", 1)[0]
+    if not inicio.isdigit():
+        raise HTTPException(400, "Vuelve a crear tu cuenta: el registro no es válido.")
+    usuario_id = int(inicio)
+    if not codigos.verificar(usuario_id, pendiente, codigo):
+        raise HTTPException(400, "El código no es correcto.")
+    with SessionLocal() as db:
+        usuario = repo_usuarios.buscar_por_id(db, usuario_id)
+        if usuario is None or usuario.estado not in ("pendiente", "activo"):
+            raise HTTPException(400, "Vuelve a crear tu cuenta: el registro no es válido.")
+        usuario.estado = "activo"
+        usuario.email_verificado = True
+        datos = abrir_sesion(db, usuario)
+        db.commit()
+    return datos
+
+
+def reenviar_confirmacion(email: str) -> dict:
+    with SessionLocal() as db:
+        usuario = repo_usuarios.buscar_por_email(db, email.strip().lower())
+    if usuario is None or usuario.estado != "pendiente":
+        raise HTTPException(404, "No hay una cuenta por confirmar con ese correo.")
+    return pedir_confirmacion(usuario)
+
+
+def login(email: str, password: str, ip: str = "") -> dict:
     email = email.strip().lower()
     espera = _login_por_ip.acquire(ip) or _fallos_por_cuenta.espera(email)
     if espera:
@@ -82,21 +132,15 @@ def login(email: str, password: str, ip: str = "", codigo: str = "", pendiente: 
         if not correcta:
             _fallos_por_cuenta.acquire(email)
             raise HTTPException(401, "Email o contraseña incorrectos.")
-        if usuario.totp_activo:
-            from . import dos_pasos  # aquí: dos_pasos también importa este módulo
-
-            # Sin código (o pidiendo otro): se envía uno nuevo al correo
-            if not codigo or not pendiente:
-                nuevo = dos_pasos.enviar_codigo(usuario)
-                raise HTTPException(
-                    401,
-                    f"Te enviamos un código de 6 dígitos a {dos_pasos.correo_oculto(usuario.email)}.",
-                    headers={**CABECERA_DOS_PASOS, "X-Splitter-Pendiente": nuevo},
-                )
-            if not dos_pasos.verificar(usuario.id, pendiente, codigo):
-                _fallos_por_cuenta.acquire(email)
-                raise HTTPException(401, "El código no es correcto.", headers={**CABECERA_DOS_PASOS, "X-Splitter-Pendiente": pendiente})
         _fallos_por_cuenta.limpiar(email)
+        if usuario.estado == "pendiente":
+            # Se registró pero no escribió el código: se le manda otro para terminar
+            datos = pedir_confirmacion(usuario)
+            raise HTTPException(
+                403,
+                f"Confirma tu correo para terminar de crear tu cuenta. {datos['mensaje']}",
+                headers={CABECERA_CONFIRMAR: "requerido", "X-Splitter-Pendiente": datos["pendiente"]},
+            )
         if usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
         datos = abrir_sesion(db, usuario)

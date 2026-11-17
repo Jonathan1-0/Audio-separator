@@ -1,5 +1,6 @@
 """Pruebas de perfil, foto, contraseña, Mis audios gratis, dueño de las descargas,
 cuota, renovación a la 1:00 a. m., Facebook y planes del seed."""
+from .conftest import registrar
 import time
 import uuid
 from datetime import datetime
@@ -34,7 +35,7 @@ def _codigo(texto: str) -> str:
 
 def _cuenta(cliente, password="clave-segura-1"):
     email = f"perfil_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Perfil", "password": password})
+    registrar(cliente, json={"email": email, "nombre": "Perfil", "password": password})
     token = cliente.post("/auth/login", json={"email": email, "password": password}).cookies["splitter_sesion"]
     return email, {"Authorization": f"Bearer {token}"}
 

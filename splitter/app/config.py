@@ -56,9 +56,6 @@ HORA_RENOVACION = _int("SPLITTER_HORA_RENOVACION", 1)
 # Foto de perfil
 MAX_FOTO_BYTES = 2 * 1024 * 1024
 
-# El panel de administración pide tener activa la verificación en dos pasos
-ADMIN_REQUIERE_DOS_PASOS = os.getenv("SPLITTER_ADMIN_REQUIERE_DOS_PASOS", "1") == "1"
-
 # Cuenta de administrador (opcional, solo en .env)
 ADMIN_EMAIL = os.getenv("SPLITTER_ADMIN_EMAIL", "").strip().lower()
 ADMIN_PASSWORD = os.getenv("SPLITTER_ADMIN_PASSWORD", "")
@@ -113,16 +110,21 @@ PRESETS = {
         "stems": ["vocals", "instrumental"],
         "autocast": AUTOCAST_VOCALS,
     },
+    # Instrumentos: 6 pistas con htdemucs_6s. Los ids "4stem" se conservan para no romper
+    # el historial guardado (antes eran 4 pistas). La calidad cambia las pasadas del modelo:
+    # shifts = veces que se separa el audio desplazado y se promedia; overlap = solapamiento entre fragmentos.
     "4stem": {
-        "label": "Voz, batería, bajo y otros (lenta, mejor calidad)",
-        "model": "htdemucs_ft.yaml",  # 4 modelos
-        "stems": ["vocals", "drums", "bass", "other"],
+        "label": "Voz, batería, bajo, guitarra, piano y otros (mejor calidad)",
+        "model": "htdemucs_6s.yaml",
+        "stems": ["vocals", "drums", "bass", "guitar", "piano", "other"],
+        "demucs": {"shifts": 2, "overlap": 0.5},
         "mejor_calidad": True,  # solo plan pro
     },
     "4stem_fast": {
-        "label": "Voz, batería, bajo y otros (rápida)",
-        "model": "htdemucs.yaml",  # 1 modelo: más rápido
-        "stems": ["vocals", "drums", "bass", "other"],
+        "label": "Voz, batería, bajo, guitarra, piano y otros (rápida)",
+        "model": "htdemucs_6s.yaml",
+        "stems": ["vocals", "drums", "bass", "guitar", "piano", "other"],
+        "demucs": {"shifts": 1, "overlap": 0.25},
     },
     "denoise": {
         "label": "Limpiar ruido: deja solo la voz (quita música y ruido de fondo)",

@@ -4,12 +4,11 @@ import urllib.parse
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from fastapi.responses import RedirectResponse
 
 from ..dependencies import direccion_base, poner_cookie, usuario_actual, usuario_opcional
 from ..models.tablas import Usuario
-from ..services import auth, social
+from ..services import social
 
 router = APIRouter(prefix="/auth/social", tags=["auth"])
 COOKIE_ESTADO = "splitter_estado"
@@ -72,26 +71,10 @@ def regreso(
                 # El token queda en la cookie HttpOnly; en la dirección solo va el identificador
                 respuesta = RedirectResponse(f"/#sesion={sesion['sesion']}")
                 poner_cookie(respuesta, request, sesion["token"])
-        except social.DosPasosPendiente as pendiente:
-            respuesta = RedirectResponse(f"/#dos-pasos={pendiente.pendiente}")
         except HTTPException as fallo:
             respuesta = _volver_con_error(str(fallo.detail))
     respuesta.delete_cookie(COOKIE_ESTADO)
     respuesta.delete_cookie(COOKIE_CONECTAR)
-    return respuesta
-
-
-class DatosDosPasos(BaseModel):
-    pendiente: str
-    codigo: str
-
-
-@router.post("/dos-pasos")
-def dos_pasos(datos: DatosDosPasos, request: Request):
-    """Segundo paso al entrar con Google o Facebook en una cuenta con verificación en dos pasos."""
-    sesion = social.terminar_dos_pasos(datos.pendiente, datos.codigo)
-    respuesta = JSONResponse(auth.publico(sesion))
-    poner_cookie(respuesta, request, sesion["token"])
     return respuesta
 
 

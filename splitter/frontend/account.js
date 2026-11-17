@@ -50,7 +50,8 @@
       : res.status >= 500 ? 'El servidor tuvo un problema. Intenta de nuevo en unos minutos.'
         : 'No se pudo completar la acción. Intenta de nuevo.');
     error.status = res.status;
-    error.dosPasos = res.headers.get('X-Splitter-Dos-Pasos') === 'requerido';
+    // Cuenta registrada que aun no confirma su correo: el servidor envio un codigo y lo pide.
+    error.confirmar = res.headers.get('X-Splitter-Confirmar') === 'requerido';
     error.pendiente = res.headers.get('X-Splitter-Pendiente') || '';
     throw error;
   }
@@ -68,18 +69,24 @@
     return sesion;
   }
 
-  async function iniciarSesion(email, password, codigo = '', pendiente = '') {
-    // El servidor pone la cookie de sesion; aqui solo llega su identificador ("sesion").
-    const respuesta = await api('/auth/login', { method: 'POST', body: { email, password, codigo, pendiente } });
+  // El servidor pone la cookie de sesion; aqui solo llega su identificador ("sesion").
+  async function abrirConRespuesta(respuesta) {
     const token = respuesta.sesion || respuesta.token;
     const cuenta = await api('/suscripcion', { token });
     setSesion(desdeCuenta(token, cuenta));
   }
-
-  async function registrarse(email, nombre, password) {
-    await api('/auth/registro', { method: 'POST', body: { email, nombre, password } });
-    await iniciarSesion(email, password);
+  async function iniciarSesion(email, password) {
+    await abrirConRespuesta(await api('/auth/login', { method: 'POST', body: { email, password } }));
   }
+  // Registro en dos pasos: se crea la cuenta y llega un codigo al correo; con el codigo se confirma y se entra.
+  //   POST /auth/registro            -> { pendiente, correo, mensaje }
+  //   POST /auth/registro/confirmar  { pendiente, codigo } -> sesion
+  //   POST /auth/registro/reenviar   { email } -> { pendiente, mensaje }
+  const registrarse = (email, nombre, password) => api('/auth/registro', { method: 'POST', body: { email, nombre, password } });
+  async function confirmarRegistro(pendiente, codigo) {
+    await abrirConRespuesta(await api('/auth/registro/confirmar', { method: 'POST', body: { pendiente, codigo } }));
+  }
+  const reenviarCodigo = (email) => api('/auth/registro/reenviar', { method: 'POST', body: { email } });
 
   // Recuperar contrasena: el backend siempre responde 200 con un mensaje (no revela si el correo existe).
   const recuperarPassword = (email) => api('/auth/recuperar', { method: 'POST', body: { email } });
@@ -513,6 +520,8 @@
     pedirCuenta,
     iniciarSesion,
     registrarse,
+    confirmarRegistro,
+    reenviarCodigo,
     recuperarPassword,
     restablecerPassword,
     proveedoresSociales,
@@ -534,44 +543,7 @@
   revisarVerificacion();
   addEventListener('hashchange', revisarVerificacion);
 
-  // Google o Facebook en una cuenta con verificacion en dos pasos: "/#dos-pasos=PENDIENTE" pide el codigo.
-  function pedirCodigoSocial(pendiente) {
-    const dialogo = crearDialogo();
-    dialogo.innerHTML = `<form novalidate>
-        <h2>Verificación en dos pasos</h2>
-        <p>Te enviamos un código de 6 dígitos a tu correo. Escríbelo para entrar.</p>
-        <label class="field" for="social-codigo"><span>Código</span>
-          <input id="social-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
-        <p class="login-message" role="alert" hidden></p>
-        <div class="wall-actions"><button type="submit" class="primary-button">Entrar</button><button type="button" class="wall-close" data-cerrar>Cancelar</button></div>
-      </form>`;
-    const form = dialogo.querySelector('form');
-    const input = dialogo.querySelector('input');
-    const error = dialogo.querySelector('[role="alert"]');
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const boton = form.querySelector('[type="submit"]');
-      boton.disabled = true;
-      try {
-        const r = await api('/auth/social/dos-pasos', { method: 'POST', body: { pendiente, codigo: input.value.trim() }, token: 'nuevo' });
-        const token = r.sesion;
-        const cuenta = await api('/suscripcion', { token });
-        setSesion(desdeCuenta(token, cuenta));
-        dialogo.close();
-      } catch (err) {
-        error.textContent = err.message;
-        error.hidden = false;
-        input.focus();
-        input.select();
-      } finally { boton.disabled = false; }
-    });
-    dialogo.addEventListener('close', () => dialogo.remove());
-    dialogo.showModal();
-    input.focus();
-  }
   function revisarRegresoSocial() {
-    const dos = /^#dos-pasos=(.+)$/.exec(location.hash);
-    if (dos) { history.replaceState(null, '', location.pathname + location.search); pedirCodigoSocial(dos[1]); }
     const conectado = /^#conectado=(google|facebook)$/.exec(location.hash);
     if (conectado) {
       history.replaceState(null, '', location.pathname + location.search);

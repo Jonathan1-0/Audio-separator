@@ -272,8 +272,10 @@ async def create_job(
         else:
             invitados.verificar_audio(seconds)
 
+        prioridad = await run_in_threadpool(cuotas.prioridad, usuario.id if usuario is not None else None)
         job = Job(
             id=job_id,
+            prioridad=prioridad,
             usuario_id=usuario.id if usuario is not None else None,
             original_name=_safe_base_name(file.filename or "audio"),
             preset=preset,

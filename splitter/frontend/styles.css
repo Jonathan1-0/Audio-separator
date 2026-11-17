@@ -561,6 +561,5 @@ html.restore-in :is(#results-panel, #job-panel) { animation: panel-in 400ms var(
 .pie-legal a { color: var(--text-2); text-decoration: none; }
 .pie-legal a:hover { color: var(--text); text-decoration: underline; }
 
-/* Perfil: verificacion en dos pasos */
-#dos-reenviar { min-height: 36px; margin-top: 6px; padding: 4px 0; font-size: 15px; }
+/* Perfil: acciones de las filas (Google) */
 .profile-row-action { min-height: 40px; padding: 6px 10px; font-size: 15px; }

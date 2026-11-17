@@ -1,4 +1,5 @@
 """Pruebas de seguridad: límites, cabeceras, verificación de correo, cerrar sesiones y borrar la cuenta."""
+from .conftest import registrar
 import re
 import time
 import uuid
@@ -19,7 +20,7 @@ def buzon(monkeypatch):
 
 def _cuenta(cliente):
     email = f"seg_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Seg", "password": PASSWORD})
+    registrar(cliente, json={"email": email, "nombre": "Seg", "password": PASSWORD})
     token = cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).cookies["splitter_sesion"]
     return email, {"Authorization": f"Bearer {token}"}
 
@@ -58,7 +59,7 @@ def test_registro_limite_por_ip(cliente, monkeypatch):
     monkeypatch.setattr(auth._registros_por_ip, "max_events", 1)
     monkeypatch.setattr(auth._registros_por_ip, "_events", type(auth._registros_por_ip._events)(auth._registros_por_ip._events.default_factory))
     _cuenta(cliente)
-    res = cliente.post("/auth/registro", json={"email": f"r_{uuid.uuid4().hex[:8]}@ejemplo.com", "nombre": "R", "password": PASSWORD})
+    res = registrar(cliente, json={"email": f"r_{uuid.uuid4().hex[:8]}@ejemplo.com", "nombre": "R", "password": PASSWORD})
     assert res.status_code == 429
 
 
@@ -93,39 +94,40 @@ def test_sin_cors_para_otras_paginas(cliente):
 
 
 # ---------- Verificar el correo ----------
-def test_registro_manda_correo_y_confirmarlo(cliente, buzon):
+def test_cuenta_nueva_queda_con_correo_confirmado(cliente):
+    _, cab = _cuenta(cliente)
+    assert cliente.get("/suscripcion", headers=cab).json()["email_verificado"] is True
+
+
+def _sin_confirmar(email):
+    from app.database import SessionLocal
+    from app.repositories import usuarios as repo_usuarios
+    with SessionLocal() as db:
+        repo_usuarios.buscar_por_email(db, email).email_verificado = False
+        db.commit()
+
+
+def test_enlace_de_verificacion_alterado_no_sirve(cliente):
+    assert cliente.post("/auth/verificar", json={"codigo": "basura"}).status_code == 400
+    assert cliente.post("/auth/verificar", json={"codigo": "1.2.YQ.00"}).status_code == 400
+
+
+def test_reenviar_confirmacion_a_cuentas_de_antes(cliente, buzon):
     email, cab = _cuenta(cliente)
-    assert cliente.get("/suscripcion", headers=cab).json()["email_verificado"] is False
-    destino, asunto, texto, cuerpo_html = buzon[-1]
-    assert destino == email and "Confirma" in asunto
-    assert cuerpo_html and "<html" in cuerpo_html and "Confirmar mi correo" in cuerpo_html
-    codigo = re.search(r"#verificar=(\S+)", texto).group(1)
+    _sin_confirmar(email)  # como las cuentas creadas antes del código por correo
+    antes = len(buzon)
+    assert cliente.post("/auth/verificar/reenviar", headers=cab).status_code == 200
+    assert len(buzon) == antes + 1
+    codigo = re.search(r"#verificar=(\S+)", buzon[-1][2]).group(1)
     assert cliente.post("/auth/verificar", json={"codigo": codigo}).status_code == 200
     assert cliente.get("/suscripcion", headers=cab).json()["email_verificado"] is True
 
 
-def test_codigo_alterado_no_sirve(cliente, buzon):
-    _cuenta(cliente)
-    codigo = re.search(r"#verificar=(\S+)", buzon[-1][2]).group(1)
-    alterado = codigo[:-1] + ("0" if codigo[-1] != "0" else "1")
-    assert cliente.post("/auth/verificar", json={"codigo": alterado}).status_code == 400
-    assert cliente.post("/auth/verificar", json={"codigo": "basura"}).status_code == 400
-
-
-def test_reenviar_confirmacion(cliente, buzon):
-    _, cab = _cuenta(cliente)
-    antes = len(buzon)
-    assert cliente.post("/auth/verificar/reenviar", headers=cab).status_code == 200
-    assert len(buzon) == antes + 1
-
-
-def test_pro_pide_correo_confirmado(cliente, buzon):
-    _, cab = _cuenta(cliente)
+def test_pro_pide_correo_confirmado(cliente):
+    email, cab = _cuenta(cliente)
+    _sin_confirmar(email)
     datos = {"marca": "Visa", "ultimos4": "4242"}
     assert cliente.post("/suscripcion/pro", json=datos, headers=cab).status_code == 403
-    codigo = re.search(r"#verificar=(\S+)", buzon[-1][2]).group(1)
-    cliente.post("/auth/verificar", json={"codigo": codigo})
-    assert cliente.post("/suscripcion/pro", json=datos, headers=cab).status_code == 201
 
 
 # ---------- Sesiones y cuenta ----------
@@ -161,14 +163,14 @@ def test_borrar_cuenta(cliente, buzon, audio_wav):
     assert cliente.get(f"/api/jobs/{job['id']}").status_code == 404
     assert buzon[-1][0] == email and "Borraste" in buzon[-1][1]
     # El correo queda libre para una cuenta nueva
-    res = cliente.post("/auth/registro", json={"email": email, "nombre": "Otra vez", "password": PASSWORD})
+    res = registrar(cliente, json={"email": email, "nombre": "Otra vez", "password": PASSWORD})
     assert res.status_code == 201
 
 
 # ---------- Sesión en cookie ----------
 def _login_cookie(cliente):
     email = f"cookie_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Galleta", "password": PASSWORD})
+    registrar(cliente, json={"email": email, "nombre": "Galleta", "password": PASSWORD})
     token = cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).cookies["splitter_sesion"]
     return {"Cookie": f"splitter_sesion={token}"}
 

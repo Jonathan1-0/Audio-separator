@@ -1,4 +1,5 @@
 """Pruebas de registro, login, logout y planes."""
+from .conftest import registrar
 import uuid
 
 
@@ -8,7 +9,7 @@ def _correo() -> str:
 
 def _registrar(cliente, email=None, password="clave-segura-1"):
     email = email or _correo()
-    res = cliente.post("/auth/registro", json={"email": email, "nombre": "Prueba", "password": password})
+    res = registrar(cliente, json={"email": email, "nombre": "Prueba", "password": password})
     return email, res
 
 

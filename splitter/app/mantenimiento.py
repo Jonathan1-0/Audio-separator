@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 
 from . import config
 from .database import SessionLocal, ahora_utc
-from .models.tablas import Resultado, Sesion, Trabajo
+from .models.tablas import Resultado, Sesion, Suscripcion, Trabajo, Usuario
 
 log = logging.getLogger("splitter.mantenimiento")
 
@@ -28,10 +28,19 @@ def limpiar_base() -> dict:
         if viejos:
             db.execute(delete(Resultado).where(Resultado.trabajo_id.in_(viejos)))
             db.execute(delete(Trabajo).where(Trabajo.id.in_(viejos)))
+        # Registros que nunca se confirmaron con el código del correo
+        sin_confirmar = list(db.scalars(
+            select(Usuario.id).where(Usuario.estado == "pendiente", Usuario.creado_en < ahora - timedelta(days=7))
+        ))
+        if sin_confirmar:
+            db.execute(delete(Sesion).where(Sesion.usuario_id.in_(sin_confirmar)))
+            db.execute(delete(Suscripcion).where(Suscripcion.usuario_id.in_(sin_confirmar)))
+            db.execute(delete(Usuario).where(Usuario.id.in_(sin_confirmar)))
         db.commit()
-    if sesiones or viejos:
-        log.info("Limpieza: %d sesiones vencidas y %d trabajos viejos borrados", sesiones, len(viejos))
-    return {"sesiones": sesiones, "trabajos": len(viejos)}
+    if sesiones or viejos or sin_confirmar:
+        log.info("Limpieza: %d sesiones vencidas, %d trabajos viejos y %d registros sin confirmar borrados",
+                 sesiones, len(viejos), len(sin_confirmar))
+    return {"sesiones": sesiones, "trabajos": len(viejos), "sin_confirmar": len(sin_confirmar)}
 
 
 class Mantenimiento:

@@ -1,4 +1,5 @@
 """Cancelar Pro al final del periodo, verificación en dos pasos, conectar Google y limpieza."""
+from .conftest import registrar
 import re
 import time
 import uuid
@@ -33,14 +34,18 @@ def _codigo(buzon) -> str:
 
 def _cuenta(cliente, buzon=None):
     email = f"segura_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Segura", "password": PASSWORD})
+    registrar(cliente, json={"email": email, "nombre": "Segura", "password": PASSWORD})
     res = cliente.post("/auth/login", json={"email": email, "password": PASSWORD})
     return email, {"Authorization": f"Bearer {res.cookies['splitter_sesion']}"}
 
 
 def _confirmar_correo(cliente, buzon):
-    codigo = re.search(r"#verificar=(\S+)", buzon[-1][2]).group(1)
-    cliente.post("/auth/verificar", json={"codigo": codigo})
+    """Abre el último enlace de confirmación (cambio de correo), si llegó alguno."""
+    for _, _, texto in reversed(buzon):
+        encontrado = re.search(r"#verificar=(\S+)", texto)
+        if encontrado:
+            cliente.post("/auth/verificar", json={"codigo": encontrado.group(1)})
+            return
 
 
 # ---------- Cancelar Pro ----------
@@ -74,72 +79,77 @@ def test_pro_cancelado_pasa_a_gratis_al_vencer(cliente, buzon):
     assert cliente.get("/suscripcion", headers=cab).json()["plan"] == "gratis"
 
 
-# ---------- Dos pasos (código por correo) ----------
-def _activar(cliente, cab, buzon):
-    pendiente = cliente.post("/auth/dos-pasos/activar/codigo", headers=cab).json()["pendiente"]
-    malo = cliente.post("/auth/dos-pasos/activar", json={"pendiente": pendiente, "codigo": "000000"}, headers=cab)
-    assert malo.status_code == 400
-    bueno = cliente.post("/auth/dos-pasos/activar", json={"pendiente": pendiente, "codigo": _codigo(buzon)}, headers=cab)
-    assert bueno.status_code == 204
+# ---------- Registro con código por correo ----------
+def _registrar_sin_confirmar(cliente, email, password=PASSWORD):
+    return cliente.post("/auth/registro", json={"email": email, "nombre": "Nueva", "password": password})
 
 
-def test_dos_pasos_por_correo(cliente, buzon):
-    email, cab = _cuenta(cliente)
-    _activar(cliente, cab, buzon)
-    cuenta = cliente.get("/suscripcion", headers=cab).json()
-    assert cuenta["dos_pasos"] is True and cuenta["email_verificado"] is True
-    assert buzon[-1][1] == "Activaste la verificación en dos pasos"
-
-    # Sin código: se envía uno al correo y se pide
-    datos = {"email": email, "password": PASSWORD}
-    sin_codigo = cliente.post("/auth/login", json=datos)
-    assert sin_codigo.status_code == 401 and sin_codigo.headers["X-Splitter-Dos-Pasos"] == "requerido"
-    assert "splitter_sesion" not in sin_codigo.cookies and "Te enviamos un código" in sin_codigo.json()["detail"]
-    pendiente = sin_codigo.headers["X-Splitter-Pendiente"]
+def test_registro_pide_el_codigo_del_correo(cliente, buzon):
+    email = f"nueva_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    res = _registrar_sin_confirmar(cliente, email)
+    assert res.status_code == 201 and res.json()["pendiente"] and "Te enviamos un código" in res.json()["mensaje"]
     assert buzon[-1][0] == email
 
-    malo = cliente.post("/auth/login", json={**datos, "pendiente": pendiente, "codigo": "123456"})
-    assert malo.status_code == 401 and malo.json()["detail"] == "El código no es correcto."
-    bueno = cliente.post("/auth/login", json={**datos, "pendiente": pendiente, "codigo": _codigo(buzon)})
+    # Sin confirmar no entra: se le manda otro código
+    sin_confirmar = cliente.post("/auth/login", json={"email": email, "password": PASSWORD})
+    assert sin_confirmar.status_code == 403 and sin_confirmar.headers["X-Splitter-Confirmar"] == "requerido"
+    pendiente = sin_confirmar.headers["X-Splitter-Pendiente"]
+
+    assert cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": "000000"}).status_code == 400
+    bueno = cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": _codigo(buzon)})
     assert bueno.status_code == 200 and bueno.cookies["splitter_sesion"]
-    # El mismo código no sirve dos veces
-    otra_vez = cliente.post("/auth/login", json={**datos, "pendiente": pendiente, "codigo": _codigo(buzon)})
-    assert otra_vez.status_code == 401
-
-    # Desactivar también se confirma con un código
-    pendiente = cliente.post("/auth/dos-pasos/desactivar/codigo", headers=cab).json()["pendiente"]
-    assert cliente.post("/auth/dos-pasos/desactivar", json={"pendiente": pendiente, "codigo": _codigo(buzon)}, headers=cab).status_code == 204
-    assert cliente.post("/auth/login", json=datos).status_code == 200
+    cab = {"Authorization": f"Bearer {bueno.cookies['splitter_sesion']}"}
+    assert cliente.get("/suscripcion", headers=cab).json()["email_verificado"] is True
+    # Ya confirmada, entra sin código
+    assert cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).status_code == 200
+    # Y el correo ya no se puede volver a registrar
+    assert _registrar_sin_confirmar(cliente, email).status_code == 409
 
 
-def test_codigo_de_otra_cuenta_no_sirve(cliente, buzon):
-    _, cab = _cuenta(cliente)
-    pendiente = cliente.post("/auth/dos-pasos/activar/codigo", headers=cab).json()["pendiente"]
-    codigo = _codigo(buzon)
-    otro_email, otro_cab = _cuenta(cliente)
-    res = cliente.post("/auth/dos-pasos/activar", json={"pendiente": pendiente, "codigo": codigo}, headers=otro_cab)
-    assert res.status_code == 400
+def test_registro_sin_confirmar_se_puede_rehacer(cliente, buzon):
+    email = f"rehacer_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    _registrar_sin_confirmar(cliente, email, "clave-de-otro-1")
+    res = _registrar_sin_confirmar(cliente, email, "mi-clave-buena-1")
+    assert res.status_code == 201
+    cliente.post("/auth/registro/confirmar", json={"pendiente": res.json()["pendiente"], "codigo": _codigo(buzon)})
+    assert cliente.post("/auth/login", json={"email": email, "password": "mi-clave-buena-1"}).status_code == 200
+    assert cliente.post("/auth/login", json={"email": email, "password": "clave-de-otro-1"}).status_code == 401
+
+
+def test_reenviar_codigo(cliente, buzon):
+    email = f"reenvio_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    _registrar_sin_confirmar(cliente, email)
+    antes = len(buzon)
+    res = cliente.post("/auth/registro/reenviar", json={"email": email})
+    assert res.status_code == 200 and res.json()["pendiente"] and len(buzon) == antes + 1
+    assert cliente.post("/auth/registro/reenviar", json={"email": "nadie@ejemplo.com"}).status_code == 404
+
+
+def test_codigo_de_otro_registro_no_sirve(cliente, buzon):
+    _registrar_sin_confirmar(cliente, f"a_{uuid.uuid4().hex[:8]}@ejemplo.com")
+    codigo_a = _codigo(buzon)
+    b = _registrar_sin_confirmar(cliente, f"b_{uuid.uuid4().hex[:8]}@ejemplo.com").json()
+    assert cliente.post("/auth/registro/confirmar", json={"pendiente": b["pendiente"], "codigo": codigo_a}).status_code == 400
 
 
 def test_demasiados_codigos_incorrectos(cliente, buzon):
-    email, cab = _cuenta(cliente)
-    _activar(cliente, cab, buzon)
-    pendiente = cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).headers["X-Splitter-Pendiente"]
+    pendiente = _registrar_sin_confirmar(cliente, f"bloq_{uuid.uuid4().hex[:8]}@ejemplo.com").json()["pendiente"]
     for _ in range(5):
-        cliente.post("/auth/login", json={"email": email, "password": PASSWORD, "pendiente": pendiente, "codigo": "111111"})
-    bloqueado = cliente.post("/auth/login", json={"email": email, "password": PASSWORD, "pendiente": pendiente, "codigo": _codigo(buzon)})
-    assert bloqueado.status_code == 429
+        cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": "111111"})
+    res = cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": _codigo(buzon)})
+    assert res.status_code == 429
+
+
+def test_login_ya_no_pide_codigo(cliente, buzon):
+    email, _ = _cuenta(cliente)
+    antes = len(buzon)
+    assert cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).status_code == 200
+    assert len(buzon) == antes  # no se envió ningún código
 
 
 def _admin(cliente):
     token = cliente.post("/auth/login", json={"email": "admin@pruebas.com", "password": "admin-pruebas-1"}).cookies["splitter_sesion"]
     return {"Authorization": f"Bearer {token}"}
-
-
-def test_panel_pide_dos_pasos(cliente, monkeypatch):
-    monkeypatch.setattr(config, "ADMIN_REQUIERE_DOS_PASOS", True)
-    res = cliente.get("/admin/resumen", headers=_admin(cliente))
-    assert res.status_code == 403 and "dos pasos" in res.json()["detail"]
 
 
 # ---------- Google ----------
@@ -188,19 +198,16 @@ def test_conectar_pide_sesion(cliente, google):
     assert res.headers["location"].startswith("/#error=")
 
 
-def test_entrar_con_google_y_dos_pasos(cliente, google, buzon):
-    google.update(email=f"g2_{uuid.uuid4().hex[:8]}@gmail.com", sub=f"g-{uuid.uuid4().hex}")
-    token = _google(cliente).cookies["splitter_sesion"]
-    cab = {"Authorization": f"Bearer {token}"}
-    _activar(cliente, cab, buzon)
-
-    destino = _google(cliente).headers["location"]
-    assert destino.startswith("/#dos-pasos=")
-    pendiente = destino.split("=", 1)[1]
-    assert cliente.post("/auth/social/dos-pasos", json={"pendiente": pendiente, "codigo": "111111"}).status_code == 401
-    res = cliente.post("/auth/social/dos-pasos", json={"pendiente": pendiente, "codigo": _codigo(buzon)})
-    assert res.status_code == 200 and res.cookies["splitter_sesion"]
-    assert cliente.post("/auth/social/dos-pasos", json={"pendiente": "basura", "codigo": "1"}).status_code == 400
+def test_google_toma_un_registro_sin_confirmar(cliente, google, buzon):
+    email = f"pend_{uuid.uuid4().hex[:8]}@gmail.com"
+    _registrar_sin_confirmar(cliente, email, "clave-de-alguien-1")
+    google.update(email=email, sub=f"g-{uuid.uuid4().hex}")
+    res = _google(cliente)
+    assert res.headers["location"].startswith("/#sesion=")
+    cuenta = cliente.get("/suscripcion", headers={"Authorization": f"Bearer {res.cookies['splitter_sesion']}"}).json()
+    assert cuenta["email"] == email and cuenta["tiene_password"] is False and cuenta["google_conectado"] is True
+    # La contraseña que había puesto quien no confirmó ya no sirve
+    assert cliente.post("/auth/login", json={"email": email, "password": "clave-de-alguien-1"}).status_code == 401
 
 
 # ---------- Limpieza ----------
@@ -213,8 +220,15 @@ def test_limpieza_borra_sesiones_vencidas_y_trabajos_viejos(cliente):
         repo_trabajos.crear(db, id=viejo, usuario_id=usuario.id, nombre_original="x", tamano_bytes=1, preset="2stem",
                             pistas_pedidas="vocals", estado="completado",
                             creado_en=ahora_utc() - timedelta(days=config.DIAS_HISTORIAL_TRABAJOS + 1))
+    pendiente = f"vieja_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    cliente.post("/auth/registro", json={"email": pendiente, "nombre": "Vieja", "password": PASSWORD})
+    with SessionLocal() as db:
+        repo_usuarios.buscar_por_email(db, pendiente).creado_en = ahora_utc() - timedelta(days=8)
+        db.commit()
     resultado = limpiar_base()
-    assert resultado["sesiones"] >= 1 and resultado["trabajos"] >= 1
+    assert resultado["sesiones"] >= 1 and resultado["trabajos"] >= 1 and resultado["sin_confirmar"] >= 1
+    with SessionLocal() as db:
+        assert repo_usuarios.buscar_por_email(db, pendiente) is None
     with SessionLocal() as db:
         assert db.get(Trabajo, viejo) is None
         assert db.query(Sesion).filter(Sesion.expira_en < ahora_utc()).count() == 0

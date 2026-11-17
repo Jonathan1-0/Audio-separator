@@ -1,7 +1,7 @@
 """Rutas de registro, login, logout y perfil."""
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from .. import config
 
 from ..dependencies import direccion_base, poner_cookie, quitar_cookie, token_actual, usuario_actual
 from ..models.tablas import Usuario
-from ..services import auth, dos_pasos, invitados, perfil, recuperacion, verificacion
+from ..services import auth, invitados, perfil, recuperacion, verificacion
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,22 +24,42 @@ class DatosRegistro(BaseModel):
 class DatosLogin(BaseModel):
     email: str
     password: str
-    codigo: str = ""  # verificación en dos pasos: el código que llegó al correo
-    pendiente: str = ""  # y el "pendiente" que devolvió el primer intento
 
 
 @router.post("/registro", status_code=201)
 def registro(datos: DatosRegistro, request: Request):
-    """Crea una cuenta con el plan gratis y manda el correo para confirmarlo."""
+    """Crea la cuenta y envía al correo el código para confirmarla."""
     usuario = auth.registrar(datos.email, datos.nombre, datos.password, invitados.ip_de(request))
-    verificacion.enviar_confirmacion(usuario, direccion_base(request))
-    return {"id": usuario.id, "email": usuario.email, "nombre": usuario.nombre}
+    return {"email": usuario.email, "nombre": usuario.nombre, **auth.pedir_confirmacion(usuario)}
+
+
+class DatosConfirmar(BaseModel):
+    pendiente: str
+    codigo: str
+
+
+@router.post("/registro/confirmar")
+def confirmar_registro(datos: DatosConfirmar, request: Request):
+    """Con el código del correo la cuenta queda activa y se abre la sesión."""
+    sesion = auth.confirmar_registro(datos.pendiente, datos.codigo)
+    respuesta = JSONResponse(auth.publico(sesion))
+    poner_cookie(respuesta, request, sesion["token"])
+    return respuesta
+
+
+class DatosReenviar(BaseModel):
+    email: str
+
+
+@router.post("/registro/reenviar")
+def reenviar_codigo(datos: DatosReenviar):
+    return auth.reenviar_confirmacion(datos.email)
 
 
 @router.post("/login")
 def login(datos: DatosLogin, request: Request):
     """Abre la sesión: el token queda en una cookie HttpOnly."""
-    sesion = auth.login(datos.email, datos.password, invitados.ip_de(request), datos.codigo, datos.pendiente)
+    sesion = auth.login(datos.email, datos.password, invitados.ip_de(request))
     respuesta = JSONResponse(auth.publico(sesion))
     poner_cookie(respuesta, request, sesion["token"])
     return respuesta
@@ -141,28 +161,6 @@ def cerrar_todas(request: Request, usuario: Usuario = Depends(usuario_actual)):
     respuesta = Response(status_code=204)
     quitar_cookie(respuesta, request)
     return respuesta
-
-
-# ---------- Verificación en dos pasos (código por correo) ----------
-@router.post("/dos-pasos/{accion}/codigo")
-def codigo_dos_pasos(accion: str, usuario: Usuario = Depends(usuario_actual)):
-    """Envía al correo el código para activar o desactivar la verificación."""
-    if accion not in ("activar", "desactivar"):
-        raise HTTPException(404, "Esa acción no existe.")
-    return dos_pasos.iniciar(usuario.id, accion == "activar")
-
-
-class DatosCodigo(BaseModel):
-    pendiente: str
-    codigo: str
-
-
-@router.post("/dos-pasos/{accion}", status_code=204)
-def cambiar_dos_pasos(accion: str, datos: DatosCodigo, usuario: Usuario = Depends(usuario_actual)):
-    """Activa o desactiva con el código que llegó al correo."""
-    if accion not in ("activar", "desactivar"):
-        raise HTTPException(404, "Esa acción no existe.")
-    dos_pasos.cambiar(usuario.id, accion == "activar", datos.pendiente, datos.codigo)
 
 
 class DatosBorrar(BaseModel):

@@ -95,6 +95,7 @@ def pagina(navegador, servidor):
     """Pestaña nueva y limpia. Falla la prueba si la página tuvo errores de JavaScript o de CSP."""
     contexto = navegador.new_context(base_url=servidor["url"], accept_downloads=True, locale="es-MX")
     pag = contexto.new_page()
+    pag.servidor = servidor  # para leer los correos del log
     errores = []
     pag.on("pageerror", lambda e: errores.append(f"JS: {e}"))
     pag.on("console", lambda m: errores.append(f"consola: {m.text}") if m.type == "error" and "Content Security Policy" in m.text else None)

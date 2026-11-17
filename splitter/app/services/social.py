@@ -108,13 +108,6 @@ def obtener_perfil(clave: str, code: str, base: str) -> dict:
     }
 
 
-class DosPasosPendiente(Exception):
-    """La cuenta tiene verificación en dos pasos: falta el código."""
-
-    def __init__(self, pendiente: str) -> None:
-        self.pendiente = pendiente
-
-
 def _columna(proveedor: str):
     """Columna con el identificador de esa red (no cambia aunque cambie el correo)."""
     return {"google": Usuario.google_id, "facebook": Usuario.facebook_id}[proveedor]
@@ -126,7 +119,8 @@ def entrar(email: str, nombre: str, proveedor: str = "google", proveedor_id: str
     - Se busca primero por el identificador de la red: así entra aunque cambie el correo.
     - Una cuenta que ya existía con ese correo no se abre sola: hay que entrar como siempre
       y conectar la red desde el perfil (Facebook ni siquiera confirma que el correo sea de quien entra).
-    - Con verificación en dos pasos lanza DosPasosPendiente: la sesión se abre al dar el código.
+    - Un registro sin confirmar con ese correo lo toma la persona que entra con Google
+      (Google confirma que el correo es suyo).
     """
     nombre_red = PROVEEDORES[proveedor]["nombre"]
     with SessionLocal() as db:
@@ -143,6 +137,15 @@ def entrar(email: str, nombre: str, proveedor: str = "google", proveedor_id: str
                 setattr(usuario, f"{proveedor}_id", proveedor_id or None)
                 usuario.email_verificado = proveedor == "google"  # Google confirma el correo; Facebook no
                 crear_periodo_gratis(db, usuario.id)
+            elif usuario.estado == "pendiente" and proveedor == "google":
+                # Nadie confirmó ese registro; Google sí confirma el correo: la cuenta es de quien entra
+                usuario.nombre = nombre
+                usuario.password_hash = auth.crear_hash(secrets.token_urlsafe(32))
+                usuario.tiene_password = False
+                usuario.proveedor = proveedor
+                usuario.google_id = proveedor_id or None
+                usuario.email_verificado = True
+                usuario.estado = "activo"
             elif usuario.proveedor == proveedor and not getattr(usuario, f"{proveedor}_id"):
                 # Cuenta creada con esta red antes de guardar su identificador
                 setattr(usuario, f"{proveedor}_id", proveedor_id or None)
@@ -153,30 +156,6 @@ def entrar(email: str, nombre: str, proveedor: str = "google", proveedor_id: str
                     f"y conecta {nombre_red} desde tu perfil para usarlo la próxima vez.",
                 )
         if usuario.estado != "activo":
-            raise HTTPException(403, "Tu cuenta está suspendida.")
-        if usuario.totp_activo:
-            from . import dos_pasos
-
-            db.commit()
-            raise DosPasosPendiente(dos_pasos.enviar_codigo(usuario))
-        datos = auth.abrir_sesion(db, usuario)
-        db.commit()
-    return datos
-
-
-def terminar_dos_pasos(pendiente: str, codigo: str) -> dict:
-    """Segundo paso de entrar con Google: el código que llegó al correo."""
-    from . import dos_pasos
-
-    inicio = (pendiente or "").split(".", 1)[0]
-    if not inicio.isdigit():
-        raise HTTPException(400, "El acceso tardó demasiado. Vuelve a entrar con Google.")
-    usuario_id = int(inicio)
-    if not dos_pasos.verificar(usuario_id, pendiente, codigo):
-        raise HTTPException(401, "El código no es correcto.")
-    with SessionLocal() as db:
-        usuario = repo_usuarios.buscar_por_id(db, usuario_id)
-        if usuario is None or usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
         datos = auth.abrir_sesion(db, usuario)
         db.commit()

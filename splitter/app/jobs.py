@@ -1,6 +1,7 @@
 """Cola de trabajos, con un hilo por GPU."""
 from __future__ import annotations
 
+import itertools
 import logging
 import queue
 import re
@@ -20,7 +21,7 @@ from .database import SessionLocal, ahora_utc
 from .engine import gpu_seconds_del_hilo
 from .models.tablas import Trabajo
 from .repositories import trabajos as repo_trabajos
-from .services.cuotas import minutos_guardado, plan_vigente
+from .services.cuotas import PLANES_PRIORITARIOS, minutos_guardado, plan_vigente
 
 log = logging.getLogger("splitter.jobs")
 
@@ -54,6 +55,7 @@ class Job:
     finished_at: Optional[float] = None
     expires_at: Optional[float] = None  # cuándo se borran sus pistas
     version: int = 0  # sube con cada cambio
+    prioridad: int = 1  # 0 = Pro y admin (pasan primero en la cola), 1 = los demás
 
     def touch(self) -> None:
         self.version += 1
@@ -100,7 +102,10 @@ class JobManager:
         self.engine = engine
         self.jobs: Dict[str, Job] = {}
         self._order: List[str] = []
-        self._queue: "queue.Queue[str]" = queue.Queue(maxsize=config.MAX_QUEUE)
+        # Cola con prioridad: (prioridad, orden de llegada, id). Pro sale antes que Gratis;
+        # dentro de la misma prioridad, el que llegó primero.
+        self._queue: "queue.PriorityQueue[tuple]" = queue.PriorityQueue(maxsize=config.MAX_QUEUE)
+        self._llegada = itertools.count()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         n = max(1, getattr(engine, "parallel_jobs", 1))
@@ -150,9 +155,16 @@ class JobManager:
 
     def _encolar(self, job: Job) -> None:
         with self._lock:
-            self._queue.put_nowait(job.id)
+            self._queue.put_nowait((job.prioridad, next(self._llegada), job.id))
             self.jobs[job.id] = job
-            self._order.append(job.id)
+            # Lugar en la fila que ve la página: detrás de los de su misma prioridad o mejor
+            lugar = len(self._order)
+            for i, otro_id in enumerate(self._order):
+                otro = self.jobs.get(otro_id)
+                if otro is not None and otro.prioridad > job.prioridad:
+                    lugar = i
+                    break
+            self._order.insert(lugar, job.id)
 
     def get(self, job_id: str) -> Optional[Job]:
         """Busca en memoria y luego en la base."""
@@ -190,7 +202,7 @@ class JobManager:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                job_id = self._queue.get(timeout=0.5)
+                _, _, job_id = self._queue.get(timeout=0.5)
             except queue.Empty:
                 continue
             job = self.jobs.get(job_id)
@@ -311,7 +323,9 @@ class JobManager:
             for fila in pendientes:
                 carpeta = config.DATA_DIR / fila.id
                 entradas = list(carpeta.glob("input.*"))
-                if entradas and self._reencolar(_job_desde_fila(fila), entradas[0]):
+                job = _job_desde_fila(fila)
+                job.prioridad = 0 if plan_vigente(db, fila.usuario_id) in PLANES_PRIORITARIOS else 1
+                if entradas and self._reencolar(job, entradas[0]):
                     repo_trabajos.actualizar_estado(db, fila.id, "en_cola", 0)
                     requeued += 1
                     continue

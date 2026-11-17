@@ -29,8 +29,6 @@ os.environ["SPLITTER_ADMIN_EMAIL"] = "admin@pruebas.com"
 os.environ["SPLITTER_ADMIN_PASSWORD"] = "admin-pruebas-1"
 # Las pruebas usan el pago simulado para probar Pro
 os.environ["SPLITTER_PAGOS_SIMULADOS"] = "1"
-# El panel pide dos pasos; se prueba aparte (test_cuenta_segura.py)
-os.environ["SPLITTER_ADMIN_REQUIERE_DOS_PASOS"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -63,3 +61,24 @@ def audio_wav() -> bytes:
         f.setframerate(22050)
         f.writeframes(b"".join(struct.pack("<h", int(9000 * math.sin(i * 0.05))) for i in range(22050 * 2)))
     return ruta.read_bytes()
+
+
+def registrar(cliente, json):
+    """Crea una cuenta como lo hace una persona: registro y luego el código que llega al correo.
+    Devuelve la respuesta del registro (o la de error, si el registro falló)."""
+    import re
+    from unittest import mock
+
+    capturado = {}
+
+    def guardar(destino, asunto, *args, **kwargs):
+        encontrado = re.search(r"Tu código de Splitter: (\d{6})", asunto)
+        if encontrado:
+            capturado["codigo"] = encontrado.group(1)
+
+    with mock.patch("app.services.codigos.correo.enviar_aviso", side_effect=guardar):
+        res = cliente.post("/auth/registro", json=json)
+    if res.status_code == 201:
+        confirmada = cliente.post("/auth/registro/confirmar", json={"pendiente": res.json()["pendiente"], "codigo": capturado["codigo"]})
+        assert confirmada.status_code == 200, confirmada.text
+    return res

@@ -56,4 +56,4 @@ def test_separacion_de_cuatro_pistas(cliente, audio_wav):
     assert res.status_code == 202
     final = _esperar(cliente, res.json()["id"])
     assert final["status"] == "done"
-    assert len(final["stems"]) == 4
+    assert [p["name"] for p in final["stems"]] == ["vocals", "drums", "bass", "guitar", "piano", "other"]

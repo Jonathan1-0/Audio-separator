@@ -96,6 +96,30 @@ def _stem_from_filename(path: str, known: list[str]) -> Optional[str]:
     return None
 
 
+def _guardar_modelos_demucs() -> None:
+    """audio-separator vuelve a leer el modelo de Demucs del disco en cada audio y lo borra al terminar.
+    Aquí se guarda el modelo ya cargado y se reutiliza mientras el contenedor siga encendido
+    (Modal lo apaga a los 2 minutos sin trabajo, y el modelo se va con él: no cuesta más)."""
+    try:
+        from audio_separator.separator.architectures import demucs_separator as ds
+    except ImportError:  # fuera de Modal no está instalado
+        return
+    if getattr(ds, "_splitter_modelos", None) is not None:
+        return
+    original = ds.get_demucs_model
+    modelos: Dict[tuple, object] = {}
+
+    def get_model(name, repo=None):
+        clave = (name, str(repo))
+        if clave not in modelos:
+            log.info("Cargando modelo de Demucs %s (se queda en memoria)", name)
+            modelos[clave] = original(name=name, repo=repo)
+        return modelos[clave]
+
+    ds.get_demucs_model = get_model
+    ds._splitter_modelos = modelos
+
+
 class RealEngine:
     """Corre dentro de Modal."""
 
@@ -103,6 +127,7 @@ class RealEngine:
         # Cada modelo se carga una sola vez
         self._seps: Dict[str, object] = {}
         self.last_timings: Dict[str, float] = {}
+        _guardar_modelos_demucs()
 
     def device_info(self) -> dict:
         info = {"engine": "real", "cuda": False, "device": "cpu"}
@@ -115,8 +140,10 @@ class RealEngine:
             pass
         return info
 
-    def _separator(self, model: str, out_dir: Path, autocast: bool = False):
-        sep = self._seps.get(model)
+    def _separator(self, model: str, out_dir: Path, autocast: bool = False, demucs: Optional[dict] = None):
+        # Un mismo modelo con otras pasadas (calidad) es otro separador
+        clave = f"{model}|{sorted((demucs or {}).items())}"
+        sep = self._seps.get(clave)
         if sep is None:
             from audio_separator.separator import Separator
 
@@ -134,10 +161,11 @@ class RealEngine:
                     "overlap": config.MDXC_OVERLAP,
                     "pitch_shift": 0,
                 },
+                demucs_params={"segment_size": "Default", "shifts": 2, "overlap": 0.25, "segments_enabled": True, **(demucs or {})},
             )
-            log.info("Cargando modelo %s (autocast=%s)", model, autocast)
+            log.info("Cargando modelo %s (autocast=%s, demucs=%s)", model, autocast, demucs)
             sep.load_model(model_filename=model)
-            self._seps[model] = sep
+            self._seps[clave] = sep
         sep.output_dir = str(out_dir)
         if getattr(sep, "model_instance", None) is not None:
             sep.model_instance.output_dir = str(out_dir)
@@ -155,10 +183,11 @@ class RealEngine:
     def _run_model(
         self, model: str, autocast: bool, input_path: Path, out_dir: Path,
         names: Dict[str, str], on_progress: ProgressCb, timings: Dict[str, float],
+        demucs: Optional[dict] = None,
     ) -> Dict[str, Path]:
         """Separa y renombra las pistas según `names`."""
         t0 = time.perf_counter()
-        sep = self._separator(model, out_dir, autocast)
+        sep = self._separator(model, out_dir, autocast, demucs)
         t1 = time.perf_counter()
         inst = sep.model_instance
         # El modelo se comparte: se cambia para este trabajo y se restaura
@@ -192,7 +221,8 @@ class RealEngine:
         else:
             names = {s: s for s in spec["stems"]}
             result = self._run_model(
-                spec["model"], spec.get("autocast", False), input_path, out_dir, names, on_progress, timings
+                spec["model"], spec.get("autocast", False), input_path, out_dir, names, on_progress, timings,
+                spec.get("demucs"),
             )
         self.last_timings = timings
         if not result:

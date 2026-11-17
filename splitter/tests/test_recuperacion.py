@@ -1,4 +1,5 @@
 """Pruebas de recuperar la contraseña."""
+from .conftest import registrar
 import re
 import uuid
 
@@ -24,7 +25,7 @@ def buzon(monkeypatch):
 
 def _cuenta_nueva(cliente) -> str:
     email = f"prueba_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Prueba", "password": PASSWORD})
+    registrar(cliente, json={"email": email, "nombre": "Prueba", "password": PASSWORD})
     return email
 
 

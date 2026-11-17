@@ -82,13 +82,6 @@
             </div>
             <button type="button" class="icon-button" id="editar-clave" aria-label="Cambiar contraseña">${PLUMA}</button>
           </div>
-          <div class="profile-row">
-            <div class="profile-row-text">
-              <span class="profile-label">Verificación en dos pasos</span>
-              <span class="profile-value" id="valor-dos-pasos"></span>
-            </div>
-            <button type="button" class="text-button text-button-accent profile-row-action" id="boton-dos-pasos"></button>
-          </div>
           ${['google', 'facebook'].map((red) => `
           <div class="profile-row" id="fila-${red}" hidden>
             <div class="profile-row-text">
@@ -103,20 +96,6 @@
           <button type="button" class="text-button text-button-danger" id="perfil-borrar">Borrar mi cuenta</button>
         </div>
       </section>
-      <form class="profile-view" data-vista="dos-pasos" aria-labelledby="dos-titulo" novalidate hidden>
-        <div class="profile-bar">
-          <button type="button" class="text-button" id="dos-cancelar">Cancelar</button>
-          <button type="submit" class="text-button text-button-accent" id="dos-guardar">Activar</button>
-        </div>
-        <h2 id="dos-titulo" class="profile-title">Verificación en dos pasos</h2>
-        <p class="profile-hint" id="dos-explicacion"></p>
-        <div class="profile-fields">
-          <label class="profile-field" for="dos-codigo"><span id="dos-etiqueta">Código de 6 dígitos</span>
-            <input id="dos-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="dos-error"></label>
-        </div>
-        <button type="button" class="text-button text-button-accent" id="dos-reenviar">Enviar otro código</button>
-        <p id="dos-error" class="profile-message" role="alert" hidden></p>
-      </form>
       <form class="profile-view" data-vista="borrar" aria-labelledby="borrar-titulo" novalidate hidden>
         <div class="profile-bar">
           <button type="button" class="text-button" id="borrar-cancelar">Cancelar</button>
@@ -177,10 +156,6 @@
     $('#editar-clave').addEventListener('click', abrirClave);
     $('#clave-cancelar').addEventListener('click', () => volverAPerfil());
     $('#perfil-cerrar-todas').addEventListener('click', cerrarTodas);
-    $('#boton-dos-pasos').addEventListener('click', () => abrirDosPasos(!window.getSesion()?.cuenta?.dos_pasos));
-    $('#dos-cancelar').addEventListener('click', () => volverAPerfil());
-    $('#dos-reenviar').addEventListener('click', () => pedirCodigoDosPasos());
-    dialogo.querySelector('[data-vista="dos-pasos"]').addEventListener('submit', (event) => { event.preventDefault(); confirmarDosPasos(); });
     for (const red of Object.keys(RED)) $(`#boton-${red}`).addEventListener('click', () => botonRed(red));
     $('#perfil-borrar').addEventListener('click', abrirBorrar);
     $('#borrar-cancelar').addEventListener('click', () => volverAPerfil());
@@ -207,7 +182,7 @@
 
   function mostrarVista(vista) {
     for (const v of dialogo.querySelectorAll('[data-vista]')) v.hidden = v.dataset.vista !== vista;
-    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo', borrar: 'borrar-titulo', 'dos-pasos': 'dos-titulo' }[vista] || 'perfil-titulo');
+    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo', borrar: 'borrar-titulo' }[vista] || 'perfil-titulo');
   }
 
   // ---------- Vista Perfil ----------
@@ -229,9 +204,6 @@
     $('#perfil-cambiar-foto').textContent = url ? 'Cambiar foto' : 'Elegir foto';
     $('#perfil-guardar-foto').hidden = !fotoPendiente;
     const c = s.cuenta || {};
-    $('#valor-dos-pasos').textContent = c.dos_pasos ? 'Activada' : 'Desactivada';
-    $('#valor-dos-pasos').classList.toggle('is-empty', !c.dos_pasos);
-    $('#boton-dos-pasos').textContent = c.dos_pasos ? 'Desactivar' : 'Activar';
     // Contraseña: las cuentas de Google o Facebook empiezan sin una propia y la pueden crear.
     const sinClave = c.tiene_password === false;
     $('#valor-clave').textContent = sinClave ? 'Sin contraseña' : '••••••••';
@@ -486,63 +458,6 @@
       ocupado = false;
       boton.disabled = false;
       boton.textContent = 'Borrar';
-    }
-  }
-
-  // ---------- Verificacion en dos pasos (codigo por correo) ----------
-  // POST /auth/dos-pasos/{activar|desactivar}/codigo -> { pendiente, correo }: envia el codigo
-  // POST /auth/dos-pasos/{activar|desactivar}  { pendiente, codigo }: confirma
-  let dosActivar = true;
-  let dosPendiente = '';
-  function abrirDosPasos(activar) {
-    if (ocupado) return;
-    dosActivar = activar;
-    campoActual = 'dos-pasos';
-    aviso($('#perfil-mensaje'), '');
-    aviso($('#dos-error'), '');
-    $('#dos-codigo').value = '';
-    $('#dos-titulo').textContent = activar ? 'Verificación en dos pasos' : 'Desactivar dos pasos';
-    $('#dos-guardar').textContent = activar ? 'Activar' : 'Desactivar';
-    $('#dos-guardar').classList.toggle('text-button-danger', !activar);
-    $('#dos-guardar').classList.toggle('text-button-accent', activar);
-    $('#dos-explicacion').textContent = 'Enviando el código…';
-    mostrarVista('dos-pasos');
-    pedirCodigoDosPasos();
-  }
-  async function pedirCodigoDosPasos() {
-    const accion = dosActivar ? 'activar' : 'desactivar';
-    aviso($('#dos-error'), '');
-    try {
-      const r = await window.apiCuenta(`/auth/dos-pasos/${accion}/codigo`, { method: 'POST' });
-      dosPendiente = r.pendiente;
-      $('#dos-explicacion').textContent = dosActivar
-        ? `Cada vez que inicies sesión te enviaremos un código a tu correo. Para activarla, escribe el código que acabamos de enviar a ${r.correo}.`
-        : `Para confirmar, escribe el código que acabamos de enviar a ${r.correo}.`;
-      $('#dos-codigo').focus();
-    } catch (err) {
-      $('#dos-explicacion').textContent = '';
-      aviso($('#dos-error'), err.message);
-    }
-  }
-  async function confirmarDosPasos() {
-    if (ocupado) return;
-    const codigo = $('#dos-codigo').value.trim();
-    if (!/^\d{6}$/.test(codigo)) { aviso($('#dos-error'), 'Escribe los 6 dígitos del código.'); $('#dos-codigo').focus(); return; }
-    ocupado = true;
-    const boton = $('#dos-guardar');
-    boton.disabled = true;
-    try {
-      await window.apiCuenta(`/auth/dos-pasos/${dosActivar ? 'activar' : 'desactivar'}`, { method: 'POST', body: { pendiente: dosPendiente, codigo } });
-      await window.refrescarCuenta();
-      ocupado = false;
-      volverAPerfil();
-      aviso($('#perfil-mensaje'), dosActivar ? 'La verificación en dos pasos quedó activada.' : 'La verificación en dos pasos quedó desactivada.');
-    } catch (err) {
-      aviso($('#dos-error'), err.message);
-      $('#dos-codigo').focus();
-    } finally {
-      ocupado = false;
-      boton.disabled = false;
     }
   }
 

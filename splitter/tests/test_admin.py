@@ -1,4 +1,5 @@
 """Pruebas del panel de administración."""
+from .conftest import registrar
 import uuid
 
 PASSWORD = "clave-segura-1"
@@ -14,7 +15,7 @@ def _admin(cliente):
 
 def _usuario(cliente):
     email = f"adm_{uuid.uuid4().hex[:10]}@ejemplo.com"
-    cliente.post("/auth/registro", json={"email": email, "nombre": "Usuario Panel", "password": PASSWORD})
+    registrar(cliente, json={"email": email, "nombre": "Usuario Panel", "password": PASSWORD})
     return email, _token(cliente, email, PASSWORD)
 
 

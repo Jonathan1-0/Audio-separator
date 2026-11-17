@@ -53,6 +53,17 @@ def plan_vigente(db: Session, usuario_id: int) -> str:
     return suscripcion_vigente(db, usuario_id).plan.nombre
 
 
+PLANES_PRIORITARIOS = {"pro", "admin"}
+
+
+def prioridad(usuario_id: Optional[int]) -> int:
+    """0 = sus trabajos pasan primero en la cola (Pro y admin); 1 = los demás."""
+    if usuario_id is None:
+        return 1
+    with SessionLocal() as db:
+        return 0 if plan_vigente(db, usuario_id) in PLANES_PRIORITARIOS else 1
+
+
 def minutos_guardado(plan: str) -> int:
     """Minutos que se guardan las pistas en ese plan."""
     return config.MINUTOS_GUARDADO_PLAN.get(plan, config.JOB_TTL_MINUTES)

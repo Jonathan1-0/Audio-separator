@@ -79,7 +79,6 @@ def mi_plan(usuario: Usuario = Depends(usuario_actual)):
             "foto_url": perfil.foto_url(usuario),
             "email_verificado": bool(usuario.email_verificado),
             "proveedor": usuario.proveedor,
-            "dos_pasos": bool(usuario.totp_activo),
             "google_conectado": bool(usuario.google_id),
             "facebook_conectado": bool(usuario.facebook_id),
             "tiene_password": bool(usuario.tiene_password),

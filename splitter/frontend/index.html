@@ -24,12 +24,12 @@
   <meta property="og:image:alt" content="Splitter: Tu audio, a tu manera.">
   <meta name="twitter:card" content="summary_large_image">
   <!-- Al recargar con un trabajo abierto se muestra su panel desde el primer pintado (sin pasar por el inicio); index.js lo llena y quita la clase. -->
-  <script>try { var v = sessionStorage.getItem('splitter-vista'); if (sessionStorage.getItem('splitter-trabajo') && (v === 'results' || v === 'job') && !/#(restablecer|sesion|error|verificar|dos-pasos|conectado)=|^#inicio$/.test(location.hash)) { var r = document.documentElement; r.classList.add('is-restoring', 'restore-in'); r.dataset.restore = v; if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } } catch (e) {}</script>
-  <link rel="stylesheet" href="styles.css?v=fichas10">
-  <script src="account.js?v=correo2fa1" defer></script>
+  <script>try { var v = sessionStorage.getItem('splitter-vista'); if (sessionStorage.getItem('splitter-trabajo') && (v === 'results' || v === 'job') && !/#(restablecer|sesion|error|verificar|conectado)=|^#inicio$/.test(location.hash)) { var r = document.documentElement; r.classList.add('is-restoring', 'restore-in'); r.dataset.restore = v; if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } } catch (e) {}</script>
+  <link rel="stylesheet" href="styles.css?v=fichas11">
+  <script src="account.js?v=registro1" defer></script>
   <script src="ojo.js?v=ojo1" defer></script>
-  <script src="profile.js?v=correo2fa1" defer></script>
-  <script src="index.js?v=ilimitado1" defer></script>
+  <script src="profile.js?v=registro1" defer></script>
+  <script src="index.js?v=seis1" defer></script>
   <script src="script.js?v=luz2" defer></script>
   <script src="smoke.js?v=ligero1" defer></script>
   <script src="glass-gl.js?v=vidrio9" defer></script>
@@ -37,7 +37,7 @@
   <script src="glass.js?v=vidrio9" defer></script>
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/motion@14.9.0/+esm">
   <script type="module" src="entrance.js?v=logo3"></script>
-  <script type="module" src="login.js?v=correo2fa1"></script>
+  <script type="module" src="login.js?v=registro1"></script>
 </head>
 <body>
   <canvas id="smoke-canvas" class="smoke-canvas" aria-hidden="true"></canvas>
@@ -106,7 +106,7 @@
             <input type="radio" name="mode" value="instruments">
             <span class="mini-spectrum" data-stems="voz bateria bajo otros" data-tone="pearl" aria-hidden="true"></span>
             <span class="mode-name">Separar instrumentos</span>
-            <span class="mode-description">Voz, batería, bajo y el resto de instrumentos por separado.</span>
+            <span class="mode-description">Voz, batería, bajo, guitarra, piano y el resto de instrumentos por separado.</span>
             <span class="mode-caption">Cada pista, por separado</span>
           </label>
           <label class="mode-card">
@@ -203,7 +203,7 @@
         <label id="confirm-field" class="field" for="login-confirm" hidden><span>Repite la contraseña</span><input id="login-confirm" name="confirm" type="password" autocomplete="new-password"></label>
         <button id="forgot-link" type="button" class="link-button" data-mode-target="reset">Olvidé mi contraseña</button>
       </div>
-      <label id="code-field" class="field" for="login-code" hidden><span>Código de verificación</span><input id="login-code" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="code-hint"><small id="code-hint" class="field-hint">El código de 6 dígitos que te enviamos a tu correo. <button type="button" id="code-resend" class="link-button">Enviar otro código</button></small></label>
+      <label id="code-field" class="field" for="login-code" hidden><span>Código de confirmación</span><input id="login-code" name="codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="code-hint"><small id="code-hint" class="field-hint">Revisa tu correo, también la carpeta de spam. <button type="button" id="code-resend" class="link-button">Enviar otro código</button></small></label>
       <p id="login-message" class="login-message" role="alert" hidden></p>
       <button id="login-submit" class="primary-button login-submit" type="submit">Iniciar sesión</button>
       <div id="social-auth" class="social-auth" hidden>
