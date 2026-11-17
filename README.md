@@ -87,7 +87,7 @@ Todas las demás opciones están comentadas en `app/config.py`.
 - Avisos por correo al cambiar la contraseña o el correo, cerrar sesión en todos los dispositivos y borrar la cuenta.
 - Facebook no confirma los correos: solo puede entrar a cuentas que se crearon con Facebook.
 - **Google se conecta de forma explícita**: una cuenta creada con contraseña no se abre con Google solo porque el correo coincida; hay que entrar con la contraseña y conectar Google desde el perfil. Las cuentas se reconocen por el identificador de Google, no por el correo.
-- **Verificación en dos pasos** (TOTP: Google Authenticator, Authy, 1Password…) con 8 códigos de respaldo de un solo uso. También se pide al entrar con Google o Facebook. El panel de administración la exige (`SPLITTER_ADMIN_REQUIERE_DOS_PASOS=0` para quitarlo).
+- **Verificación en dos pasos por correo**: al iniciar sesión (con contraseña o con Google) se envía un código de 6 dígitos que vence en 10 minutos; sirve una sola vez y hay límite de intentos y de envíos. El panel de administración la exige (`SPLITTER_ADMIN_REQUIERE_DOS_PASOS=0` para quitarlo).
 - Los límites de intentos se guardan en `data/` y no se reinician al reiniciar el servidor.
 
 ## Base de datos

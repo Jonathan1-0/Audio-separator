@@ -10,4 +10,3 @@ cryptography
 bcrypt
 python-dotenv
 sentry-sdk
-qrcode

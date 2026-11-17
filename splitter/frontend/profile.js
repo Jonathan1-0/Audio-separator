@@ -109,37 +109,13 @@
           <button type="submit" class="text-button text-button-accent" id="dos-guardar">Activar</button>
         </div>
         <h2 id="dos-titulo" class="profile-title">Verificación en dos pasos</h2>
-        <div id="dos-paso-qr">
-          <p class="profile-hint">1. Escanea este código con tu app de autenticación (Google Authenticator, Authy, 1Password…).</p>
-          <div class="dos-qr"><img id="dos-qr" alt="Código QR para tu app de autenticación" width="200" height="200"></div>
-          <p class="profile-hint">¿No puedes escanearlo? Escribe esta clave en la app:</p>
-          <p class="dos-secreto" id="dos-secreto"></p>
-          <div class="profile-fields">
-            <label class="profile-field" for="dos-codigo"><span>2. Escribe el código de 6 dígitos que muestra la app</span>
-              <input id="dos-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="dos-error"></label>
-          </div>
-        </div>
-        <div id="dos-paso-respaldo" hidden>
-          <p class="profile-hint">Listo, quedó activada. Guarda estos <strong>códigos de respaldo</strong> en un lugar seguro: si pierdes tu teléfono, cada uno sirve una vez para entrar. No los volveremos a mostrar.</p>
-          <ol class="dos-respaldo" id="dos-respaldo"></ol>
-          <button type="button" class="text-button text-button-accent" id="dos-copiar">Copiar códigos</button>
-        </div>
-        <p id="dos-error" class="profile-message" role="alert" hidden></p>
-      </form>
-      <form class="profile-view" data-vista="dos-quitar" aria-labelledby="dos-quitar-titulo" novalidate hidden>
-        <div class="profile-bar">
-          <button type="button" class="text-button" id="dos-quitar-cancelar">Cancelar</button>
-          <button type="submit" class="text-button text-button-danger" id="dos-quitar-guardar">Desactivar</button>
-        </div>
-        <h2 id="dos-quitar-titulo" class="profile-title">Desactivar dos pasos</h2>
-        <p class="profile-hint profile-warning">Tu cuenta quedará protegida solo con tu contraseña.</p>
+        <p class="profile-hint" id="dos-explicacion"></p>
         <div class="profile-fields">
-          <label class="profile-field" for="dos-quitar-clave" id="dos-quitar-clave-campo"><span>Tu contraseña</span>
-            <input id="dos-quitar-clave" type="password" autocomplete="current-password" maxlength="72"></label>
-          <label class="profile-field" for="dos-quitar-codigo"><span>Código de tu app o de respaldo</span>
-            <input id="dos-quitar-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" aria-describedby="dos-quitar-error"></label>
+          <label class="profile-field" for="dos-codigo"><span id="dos-etiqueta">Código de 6 dígitos</span>
+            <input id="dos-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-describedby="dos-error"></label>
         </div>
-        <p id="dos-quitar-error" class="profile-message" role="alert" hidden></p>
+        <button type="button" class="text-button text-button-accent" id="dos-reenviar">Enviar otro código</button>
+        <p id="dos-error" class="profile-message" role="alert" hidden></p>
       </form>
       <form class="profile-view" data-vista="borrar" aria-labelledby="borrar-titulo" novalidate hidden>
         <div class="profile-bar">
@@ -201,12 +177,10 @@
     $('#editar-clave').addEventListener('click', abrirClave);
     $('#clave-cancelar').addEventListener('click', () => volverAPerfil());
     $('#perfil-cerrar-todas').addEventListener('click', cerrarTodas);
-    $('#boton-dos-pasos').addEventListener('click', () => (window.getSesion()?.cuenta?.dos_pasos ? abrirQuitarDosPasos() : abrirDosPasos()));
+    $('#boton-dos-pasos').addEventListener('click', () => abrirDosPasos(!window.getSesion()?.cuenta?.dos_pasos));
     $('#dos-cancelar').addEventListener('click', () => volverAPerfil());
-    $('#dos-copiar').addEventListener('click', copiarRespaldo);
+    $('#dos-reenviar').addEventListener('click', () => pedirCodigoDosPasos());
     dialogo.querySelector('[data-vista="dos-pasos"]').addEventListener('submit', (event) => { event.preventDefault(); confirmarDosPasos(); });
-    $('#dos-quitar-cancelar').addEventListener('click', () => volverAPerfil());
-    dialogo.querySelector('[data-vista="dos-quitar"]').addEventListener('submit', (event) => { event.preventDefault(); quitarDosPasos(); });
     for (const red of Object.keys(RED)) $(`#boton-${red}`).addEventListener('click', () => botonRed(red));
     $('#perfil-borrar').addEventListener('click', abrirBorrar);
     $('#borrar-cancelar').addEventListener('click', () => volverAPerfil());
@@ -233,7 +207,7 @@
 
   function mostrarVista(vista) {
     for (const v of dialogo.querySelectorAll('[data-vista]')) v.hidden = v.dataset.vista !== vista;
-    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo', borrar: 'borrar-titulo', 'dos-pasos': 'dos-titulo', 'dos-quitar': 'dos-quitar-titulo' }[vista] || 'perfil-titulo');
+    dialogo.setAttribute('aria-labelledby', { editar: 'editar-titulo', clave: 'clave-titulo', borrar: 'borrar-titulo', 'dos-pasos': 'dos-titulo' }[vista] || 'perfil-titulo');
   }
 
   // ---------- Vista Perfil ----------
@@ -515,76 +489,61 @@
     }
   }
 
-  // ---------- Verificacion en dos pasos ----------
-  let codigosRespaldo = [];
-  async function abrirDosPasos() {
+  // ---------- Verificacion en dos pasos (codigo por correo) ----------
+  // POST /auth/dos-pasos/{activar|desactivar}/codigo -> { pendiente, correo }: envia el codigo
+  // POST /auth/dos-pasos/{activar|desactivar}  { pendiente, codigo }: confirma
+  let dosActivar = true;
+  let dosPendiente = '';
+  function abrirDosPasos(activar) {
     if (ocupado) return;
+    dosActivar = activar;
     campoActual = 'dos-pasos';
     aviso($('#perfil-mensaje'), '');
     aviso($('#dos-error'), '');
-    $('#dos-paso-qr').hidden = false;
-    $('#dos-paso-respaldo').hidden = true;
-    $('#dos-guardar').textContent = 'Activar';
-    $('#dos-cancelar').textContent = 'Cancelar';
-    $('#dos-copiar').textContent = 'Copiar códigos';
     $('#dos-codigo').value = '';
-    $('#dos-qr').removeAttribute('src');
-    $('#dos-secreto').textContent = '';
+    $('#dos-titulo').textContent = activar ? 'Verificación en dos pasos' : 'Desactivar dos pasos';
+    $('#dos-guardar').textContent = activar ? 'Activar' : 'Desactivar';
+    $('#dos-guardar').classList.toggle('text-button-danger', !activar);
+    $('#dos-guardar').classList.toggle('text-button-accent', activar);
+    $('#dos-explicacion').textContent = 'Enviando el código…';
     mostrarVista('dos-pasos');
+    pedirCodigoDosPasos();
+  }
+  async function pedirCodigoDosPasos() {
+    const accion = dosActivar ? 'activar' : 'desactivar';
+    aviso($('#dos-error'), '');
     try {
-      const r = await window.apiCuenta('/auth/dos-pasos/iniciar', { method: 'POST' });
-      $('#dos-qr').src = r.qr;
-      $('#dos-secreto').textContent = r.secreto.match(/.{1,4}/g).join(' ');
+      const r = await window.apiCuenta(`/auth/dos-pasos/${accion}/codigo`, { method: 'POST' });
+      dosPendiente = r.pendiente;
+      $('#dos-explicacion').textContent = dosActivar
+        ? `Cada vez que inicies sesión te enviaremos un código a tu correo. Para activarla, escribe el código que acabamos de enviar a ${r.correo}.`
+        : `Para confirmar, escribe el código que acabamos de enviar a ${r.correo}.`;
       $('#dos-codigo').focus();
-    } catch (err) { aviso($('#dos-error'), err.message); }
+    } catch (err) {
+      $('#dos-explicacion').textContent = '';
+      aviso($('#dos-error'), err.message);
+    }
   }
   async function confirmarDosPasos() {
     if (ocupado) return;
-    if (!$('#dos-paso-respaldo').hidden) { volverAPerfil(); return; }   // "Listo" tras ver los codigos
     const codigo = $('#dos-codigo').value.trim();
-    if (!/^\d{6}$/.test(codigo)) { aviso($('#dos-error'), 'Escribe los 6 dígitos que muestra la app.'); $('#dos-codigo').focus(); return; }
+    if (!/^\d{6}$/.test(codigo)) { aviso($('#dos-error'), 'Escribe los 6 dígitos del código.'); $('#dos-codigo').focus(); return; }
     ocupado = true;
+    const boton = $('#dos-guardar');
+    boton.disabled = true;
     try {
-      const r = await window.apiCuenta('/auth/dos-pasos/confirmar', { method: 'POST', body: { codigo } });
-      codigosRespaldo = r.codigos_respaldo || [];
-      $('#dos-respaldo').replaceChildren(...codigosRespaldo.map((c) => Object.assign(document.createElement('li'), { textContent: c })));
-      $('#dos-paso-qr').hidden = true;
-      $('#dos-paso-respaldo').hidden = false;
-      $('#dos-guardar').textContent = 'Listo';
-      $('#dos-cancelar').textContent = 'Cerrar';
-      aviso($('#dos-error'), '');
-      window.refrescarCuenta();
-    } catch (err) {
-      aviso($('#dos-error'), err.message);
-      $('#dos-codigo').focus();
-    } finally { ocupado = false; }
-  }
-  async function copiarRespaldo() {
-    try { await navigator.clipboard.writeText(codigosRespaldo.join('\n')); $('#dos-copiar').textContent = 'Copiados'; }
-    catch { $('#dos-copiar').textContent = 'No se pudo copiar: anótalos'; }
-  }
-  function abrirQuitarDosPasos() {
-    campoActual = 'dos-quitar';
-    aviso($('#perfil-mensaje'), '');
-    aviso($('#dos-quitar-error'), '');
-    $('#dos-quitar-clave').value = '';
-    $('#dos-quitar-codigo').value = '';
-    $('#dos-quitar-clave-campo').hidden = !conPassword();
-    mostrarVista('dos-quitar');
-    (conPassword() ? $('#dos-quitar-clave') : $('#dos-quitar-codigo')).focus();
-  }
-  async function quitarDosPasos() {
-    if (ocupado) return;
-    ocupado = true;
-    try {
-      await window.apiCuenta('/auth/dos-pasos/desactivar', { method: 'POST', body: { password: $('#dos-quitar-clave').value, codigo: $('#dos-quitar-codigo').value.trim() }, token: window.getSesion()?.token });
+      await window.apiCuenta(`/auth/dos-pasos/${dosActivar ? 'activar' : 'desactivar'}`, { method: 'POST', body: { pendiente: dosPendiente, codigo } });
       await window.refrescarCuenta();
       ocupado = false;
       volverAPerfil();
-      aviso($('#perfil-mensaje'), 'La verificación en dos pasos quedó desactivada.');
+      aviso($('#perfil-mensaje'), dosActivar ? 'La verificación en dos pasos quedó activada.' : 'La verificación en dos pasos quedó desactivada.');
     } catch (err) {
-      aviso($('#dos-quitar-error'), err.message);
-    } finally { ocupado = false; }
+      aviso($('#dos-error'), err.message);
+      $('#dos-codigo').focus();
+    } finally {
+      ocupado = false;
+      boton.disabled = false;
+    }
   }
 
   // ---------- Google y Facebook ----------

@@ -20,7 +20,8 @@ const nameInput = $('login-name');
 const submit = $('login-submit');
 const message = $('login-message');
 const codeInput = $('login-code');
-let pideCodigo = false;    // la cuenta tiene verificacion en dos pasos: se pide el codigo
+let pideCodigo = false;    // la cuenta tiene verificacion en dos pasos: se pide el codigo del correo
+let pendiente = '';        // lo devuelve el servidor junto con el codigo enviado
 const modes = {
   login: { title: 'Inicia sesión', lead: 'Tu plan, tus límites y, con Pro, tus audios guardados en Mis audios.', submit: 'Iniciar sesión', switchText: '¿No tienes cuenta?', switchLink: 'Crear cuenta', next: 'register', autocomplete: 'current-password' },
   register: { title: 'Crea tu cuenta', lead: 'Gratis. Solo necesitas un correo y una contraseña.', submit: 'Crear cuenta', switchText: '¿Ya tienes cuenta?', switchLink: 'Inicia sesión', next: 'login', autocomplete: 'new-password' },
@@ -68,6 +69,7 @@ function setMode(next) {
   confirm.required = choosing;
   nameInput.required = next === 'register';
   pideCodigo = false;
+  pendiente = '';
   $('code-field').hidden = true;
   codeInput.value = '';
   setMessage();
@@ -243,22 +245,35 @@ form.addEventListener('submit', async (event) => {
       return;
     }
     if (mode === 'register') await window.registrarse(email.value.trim(), nameInput.value.trim(), password.value);
-    else await window.iniciarSesion(email.value.trim(), password.value, pideCodigo ? codeInput.value.trim() : '');
+    else await window.iniciarSesion(email.value.trim(), password.value, pideCodigo ? codeInput.value.trim() : '', pideCodigo ? pendiente : '');
     sending = false;
     submit.disabled = false;
     await requestClose();
   } catch (error) {
     sending = false;
     submit.disabled = false;
-    showMessage(error.message);
-    // Verificacion en dos pasos: el servidor pide el codigo; se muestra el campo y se vuelve a enviar.
+    // Verificacion en dos pasos: el servidor envio un codigo al correo; se muestra el campo.
     if (error.dosPasos && mode === 'login') {
+      const nuevo = !pideCodigo || error.pendiente !== pendiente;
       pideCodigo = true;
+      pendiente = error.pendiente || pendiente;
       $('code-field').hidden = false;
-      codeInput.value = '';
+      if (nuevo) codeInput.value = '';
       codeInput.focus();
+      showMessage(error.message, nuevo);
+    } else {
+      showMessage(error.message);
     }
   }
+});
+
+// "Enviar otro codigo": se vuelve a entrar sin codigo y el servidor manda uno nuevo.
+$('code-resend').addEventListener('click', () => {
+  if (sending) return;
+  pideCodigo = false;
+  pendiente = '';
+  codeInput.value = '';
+  form.requestSubmit();
 });
 
 // Proveedores sociales: solo se muestran los que el servidor tiene configurados.

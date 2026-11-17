@@ -4,7 +4,6 @@ import uuid
 
 from playwright.sync_api import expect
 
-from app.services import dos_pasos
 
 PASSWORD = "clave-e2e-segura"
 
@@ -66,23 +65,23 @@ def test_registro_confirmar_correo_y_separar(pagina, servidor, audio_wav):
     expect(pagina.get_by_role("dialog", name="Mis audios").get_by_text("tono", exact=True)).to_be_visible()
 
 
+def _ultimo_codigo(servidor) -> str:
+    return re.findall(r"Tu código de Splitter: (\d{6})", servidor["log"].read_text())[-1]
+
+
 def test_dos_pasos_desde_el_perfil(pagina, servidor):
     email = f"e2e2fa_{uuid.uuid4().hex[:8]}@ejemplo.test"
     _registrarse(pagina, email)
     _abrir_menu(pagina)
     pagina.locator("#menu-profile").click()
     pagina.locator("#boton-dos-pasos").click()
-    expect(pagina.locator("#dos-qr")).to_have_attribute("src", re.compile("^data:image/svg"))
-    secreto = pagina.locator("#dos-secreto").inner_text().replace(" ", "")
-    pagina.locator("#dos-codigo").fill(dos_pasos.codigo_actual(secreto))
-    pagina.locator("#dos-guardar").click()
-    expect(pagina.locator("#dos-respaldo li")).to_have_count(8)
-    respaldo = pagina.locator("#dos-respaldo li").first.inner_text()
+    expect(pagina.locator("#dos-explicacion")).to_contain_text("acabamos de enviar")
+    pagina.locator("#dos-codigo").fill(_ultimo_codigo(servidor))
     pagina.locator("#dos-guardar").click()
     expect(pagina.locator("#valor-dos-pasos")).to_have_text("Activada")
     pagina.keyboard.press("Escape")
 
-    # Al volver a entrar se pide el código
+    # Al volver a entrar se pide el código que llega al correo
     _abrir_menu(pagina)
     pagina.locator("#menu-logout").click()
     pagina.get_by_role("button", name="Inicia sesión").click()
@@ -90,7 +89,8 @@ def test_dos_pasos_desde_el_perfil(pagina, servidor):
     pagina.locator("#login-password").fill(PASSWORD)
     pagina.locator("#login-submit").click()
     expect(pagina.locator("#code-field")).to_be_visible()
-    pagina.locator("#login-code").fill(respaldo)
+    expect(pagina.locator("#login-message")).to_contain_text("Te enviamos un código")
+    pagina.locator("#login-code").fill(_ultimo_codigo(servidor))
     pagina.locator("#login-submit").click()
     expect(pagina.locator("#login-dialog")).not_to_be_visible()
     _abrir_menu(pagina)

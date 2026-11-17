@@ -67,7 +67,7 @@ def password_correcta(usuario: Usuario, password: str) -> bool:
     return len(password.encode()) <= MAX_BYTES_PASSWORD and bcrypt.checkpw(password.encode(), usuario.password_hash.encode())
 
 
-def login(email: str, password: str, ip: str = "", codigo: str = "") -> dict:
+def login(email: str, password: str, ip: str = "", codigo: str = "", pendiente: str = "") -> dict:
     email = email.strip().lower()
     espera = _login_por_ip.acquire(ip) or _fallos_por_cuenta.espera(email)
     if espera:
@@ -85,12 +85,17 @@ def login(email: str, password: str, ip: str = "", codigo: str = "") -> dict:
         if usuario.totp_activo:
             from . import dos_pasos  # aquí: dos_pasos también importa este módulo
 
-            if not codigo:
-                raise HTTPException(401, "Escribe el código de 6 dígitos de tu app de autenticación.", headers=CABECERA_DOS_PASOS)
-            if not dos_pasos.verificar(usuario, codigo, db):
-                db.commit()
+            # Sin código (o pidiendo otro): se envía uno nuevo al correo
+            if not codigo or not pendiente:
+                nuevo = dos_pasos.enviar_codigo(usuario)
+                raise HTTPException(
+                    401,
+                    f"Te enviamos un código de 6 dígitos a {dos_pasos.correo_oculto(usuario.email)}.",
+                    headers={**CABECERA_DOS_PASOS, "X-Splitter-Pendiente": nuevo},
+                )
+            if not dos_pasos.verificar(usuario.id, pendiente, codigo):
                 _fallos_por_cuenta.acquire(email)
-                raise HTTPException(401, "El código no es correcto.", headers=CABECERA_DOS_PASOS)
+                raise HTTPException(401, "El código no es correcto.", headers={**CABECERA_DOS_PASOS, "X-Splitter-Pendiente": pendiente})
         _fallos_por_cuenta.limpiar(email)
         if usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")

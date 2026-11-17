@@ -1,9 +1,6 @@
 """Entrar con Google o Facebook (OAuth 2)."""
-import hashlib
-import hmac
 import json
 import secrets
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -118,25 +115,6 @@ class DosPasosPendiente(Exception):
         self.pendiente = pendiente
 
 
-_CLAVE = hashlib.sha256(b"splitter-social-2fa:" + (config.SECRET_KEY or secrets.token_hex(32)).encode()).digest()
-MINUTOS_PENDIENTE = 5
-
-
-def _firmar_pendiente(usuario_id: int) -> str:
-    vence = int(time.time()) + MINUTOS_PENDIENTE * 60
-    firma = hmac.new(_CLAVE, f"{usuario_id}.{vence}".encode(), hashlib.sha256).hexdigest()
-    return f"{usuario_id}.{vence}.{firma}"
-
-
-def _leer_pendiente(pendiente: str) -> int:
-    partes = pendiente.split(".")
-    if len(partes) == 3 and partes[0].isdigit() and partes[1].isdigit() and int(partes[1]) >= time.time():
-        esperada = hmac.new(_CLAVE, f"{partes[0]}.{partes[1]}".encode(), hashlib.sha256).hexdigest()
-        if hmac.compare_digest(partes[2], esperada):
-            return int(partes[0])
-    raise HTTPException(400, "El acceso tardó demasiado. Vuelve a entrar con Google o Facebook.")
-
-
 def _columna(proveedor: str):
     """Columna con el identificador de esa red (no cambia aunque cambie el correo)."""
     return {"google": Usuario.google_id, "facebook": Usuario.facebook_id}[proveedor]
@@ -177,25 +155,29 @@ def entrar(email: str, nombre: str, proveedor: str = "google", proveedor_id: str
         if usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
         if usuario.totp_activo:
+            from . import dos_pasos
+
             db.commit()
-            raise DosPasosPendiente(_firmar_pendiente(usuario.id))
+            raise DosPasosPendiente(dos_pasos.enviar_codigo(usuario))
         datos = auth.abrir_sesion(db, usuario)
         db.commit()
     return datos
 
 
 def terminar_dos_pasos(pendiente: str, codigo: str) -> dict:
-    """Segundo paso de entrar con Google o Facebook."""
+    """Segundo paso de entrar con Google: el código que llegó al correo."""
     from . import dos_pasos
 
-    usuario_id = _leer_pendiente(pendiente)
+    inicio = (pendiente or "").split(".", 1)[0]
+    if not inicio.isdigit():
+        raise HTTPException(400, "El acceso tardó demasiado. Vuelve a entrar con Google.")
+    usuario_id = int(inicio)
+    if not dos_pasos.verificar(usuario_id, pendiente, codigo):
+        raise HTTPException(401, "El código no es correcto.")
     with SessionLocal() as db:
         usuario = repo_usuarios.buscar_por_id(db, usuario_id)
         if usuario is None or usuario.estado != "activo":
             raise HTTPException(403, "Tu cuenta está suspendida.")
-        if not dos_pasos.verificar(usuario, codigo, db):
-            db.commit()
-            raise HTTPException(401, "El código no es correcto.")
         datos = auth.abrir_sesion(db, usuario)
         db.commit()
     return datos

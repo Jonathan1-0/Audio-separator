@@ -51,6 +51,7 @@
         : 'No se pudo completar la acción. Intenta de nuevo.');
     error.status = res.status;
     error.dosPasos = res.headers.get('X-Splitter-Dos-Pasos') === 'requerido';
+    error.pendiente = res.headers.get('X-Splitter-Pendiente') || '';
     throw error;
   }
 
@@ -67,9 +68,9 @@
     return sesion;
   }
 
-  async function iniciarSesion(email, password, codigo = '') {
+  async function iniciarSesion(email, password, codigo = '', pendiente = '') {
     // El servidor pone la cookie de sesion; aqui solo llega su identificador ("sesion").
-    const respuesta = await api('/auth/login', { method: 'POST', body: { email, password, codigo } });
+    const respuesta = await api('/auth/login', { method: 'POST', body: { email, password, codigo, pendiente } });
     const token = respuesta.sesion || respuesta.token;
     const cuenta = await api('/suscripcion', { token });
     setSesion(desdeCuenta(token, cuenta));
@@ -538,9 +539,9 @@
     const dialogo = crearDialogo();
     dialogo.innerHTML = `<form novalidate>
         <h2>Verificación en dos pasos</h2>
-        <p>Escribe el código de 6 dígitos de tu app de autenticación, o uno de tus códigos de respaldo.</p>
+        <p>Te enviamos un código de 6 dígitos a tu correo. Escríbelo para entrar.</p>
         <label class="field" for="social-codigo"><span>Código</span>
-          <input id="social-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" required></label>
+          <input id="social-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
         <p class="login-message" role="alert" hidden></p>
         <div class="wall-actions"><button type="submit" class="primary-button">Entrar</button><button type="button" class="wall-close" data-cerrar>Cancelar</button></div>
       </form>`;
