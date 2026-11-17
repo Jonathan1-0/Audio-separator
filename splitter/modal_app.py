@@ -22,7 +22,8 @@ MODEL_DIR = "/models"
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("ffmpeg")
-    .pip_install("audio-separator[gpu]==0.47.0", "audioread")
+    # python-dotenv: app/config.py lo importa al arrancar
+    .pip_install("audio-separator[gpu]==0.47.0", "audioread", "python-dotenv")
     # El contenedor necesita las mismas variables que al desplegar
     .env({
         "SPLITTER_MODEL_DIR": MODEL_DIR,
