@@ -239,7 +239,10 @@ class JobManager:
                 self._guardar_estado(job)
 
         try:
-            files = self.engine.separate(job.input_path, job.out_dir, job.preset, on_progress)
+            # Pro y admin van a la GPU rápida
+            files = self.engine.separate(
+                job.input_path, job.out_dir, job.preset, on_progress, prioritario=job.prioridad == 0
+            )
             job.gpu_seconds = gpu_seconds_del_hilo()
             # Solo las pistas que pidió el usuario
             keep = {s: p for s, p in files.items() if s in job.wanted_stems}

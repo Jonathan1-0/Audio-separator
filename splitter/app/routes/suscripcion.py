@@ -9,7 +9,7 @@ from ..models.tablas import Usuario
 from ..repositories import suscripciones as repo_suscripciones
 from ..repositories import trabajos as repo_trabajos
 from ..services import pagos, perfil
-from ..services.cuotas import limite_trabajos, minutos_guardado, suscripcion_vigente
+from ..services.cuotas import PLANES_PRIORITARIOS, limite_trabajos, minutos_guardado, suscripcion_vigente
 
 router = APIRouter(prefix="/suscripcion", tags=["suscripcion"])
 
@@ -52,6 +52,8 @@ def _plan_publico(plan) -> dict:
         "mejor_calidad": plan.mejor_calidad,
         "minutos_guardado": minutos_guardado(plan.nombre),
         "historial": plan.nombre in config.PLANES_CON_HISTORIAL,
+        # GPU más rápida (L40S) y primero en la cola
+        "prioridad": plan.nombre in PLANES_PRIORITARIOS,
     }
 
 

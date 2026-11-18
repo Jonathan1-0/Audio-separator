@@ -1,5 +1,6 @@
 """Separación de audio en la GPU de Modal. Para subirlo:
-    SPLITTER_GPU=L4 modal deploy modal_app.py   # splitter-gpu-l4
+    SPLITTER_GPU=L4 modal deploy modal_app.py     # splitter-gpu-l4 (gratis)
+    SPLITTER_GPU=L40S modal deploy modal_app.py   # splitter-gpu-l40s (pro)
 """
 from __future__ import annotations
 
@@ -7,14 +8,14 @@ import os
 
 import modal
 
-SUPPORTED_GPUS = ("T4", "L4")
+SUPPORTED_GPUS = ("T4", "L4", "L40S")
 GPU = os.environ.get("SPLITTER_GPU", "L4").upper()
 if GPU not in SUPPORTED_GPUS:
     raise ValueError(f"SPLITTER_GPU debe ser uno de {SUPPORTED_GPUS}, no {GPU!r}")
 
 APP_NAME = f"splitter-gpu-{GPU.lower()}"
-# Si no hay L4 libre, usa una T4
-GPU_OPTIONS = ["L4", "T4"] if GPU == "L4" else [GPU]
+# Si no hay una libre, usa la siguiente
+GPU_OPTIONS = {"L40S": ["L40S", "L4"], "L4": ["L4", "T4"]}.get(GPU, [GPU])
 # GPUs a la vez. Igual que SPLITTER_PARALLEL_JOBS
 MAX_CONTAINERS = int(os.environ.get("SPLITTER_MAX_CONTAINERS", "3"))
 MODEL_DIR = "/models"

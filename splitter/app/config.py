@@ -68,6 +68,8 @@ MAX_QUEUE = _int("SPLITTER_MAX_QUEUE", 20)
 # "modal" o "fake" (tonos de prueba)
 ENGINE = os.getenv("SPLITTER_ENGINE", "modal").lower()
 MODAL_APP = os.getenv("SPLITTER_MODAL_APP", "splitter-gpu-l4")
+# App con GPU más rápida para Pro y admin. Vacío = la misma que MODAL_APP
+MODAL_APP_PRO = os.getenv("SPLITTER_MODAL_APP_PRO", "splitter-gpu-l40s")
 # Minutos que se espera una GPU. 0 = sin límite
 MODAL_START_MINUTES = _int("SPLITTER_MODAL_START_MINUTES", 5)
 

@@ -287,17 +287,21 @@ class ModalEngine:
     parallel_jobs = config.PARALLEL_JOBS
     waits_for_gpu = True
 
-    def __init__(self, app_name: Optional[str] = None) -> None:
+    def __init__(self, app_name: Optional[str] = None, app_pro: Optional[str] = None) -> None:
         import modal
 
         self.app_name = app_name or config.MODAL_APP
+        self.app_pro = config.MODAL_APP_PRO if app_pro is None else app_pro
         self._cls = modal.Cls.from_name(self.app_name, "Separator")
+        self._cls_pro = (
+            modal.Cls.from_name(self.app_pro, "Separator") if self.app_pro and self.app_pro != self.app_name else None
+        )
 
     def device_info(self) -> dict:
         gpu = self.app_name.rsplit("-", 1)[-1].upper() if self.app_name.startswith("splitter-gpu-") else "GPU"
         return {"engine": "modal", "cuda": True, "device": f"NVIDIA {gpu} (Modal: {self.app_name})"}
 
-    def _wait(self, call, progress, preset: str, on_progress: ProgressCb) -> dict:
+    def _wait(self, call, progress, app_name: str, preset: str, on_progress: ProgressCb) -> dict:
         """Espera el resultado. Si la GPU no llega a tiempo, cancela."""
         limit = config.MODAL_START_MINUTES * 60  # 0 = sin límite
         deadline = time.monotonic() + limit
@@ -312,11 +316,14 @@ class ModalEngine:
                 on_progress(item["value"] * self.SEPARATION_SHARE)
             if not started and limit and time.monotonic() > deadline:
                 call.cancel()
-                log.error("Modal %s (%s): sin GPU tras %s min; llamada cancelada", self.app_name, preset,
+                log.error("Modal %s (%s): sin GPU tras %s min; llamada cancelada", app_name, preset,
                           config.MODAL_START_MINUTES)
                 raise SeparationError("No hay GPU disponible en este momento. Intenta de nuevo en unos minutos.")
 
-    def separate(self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb) -> Dict[str, Path]:
+    def separate(
+        self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb, prioritario: bool = False
+    ) -> Dict[str, Path]:
+        """prioritario: Pro y admin, que van a la GPU rápida (MODAL_APP_PRO)."""
         import subprocess
 
         import modal
@@ -329,8 +336,18 @@ class ModalEngine:
         started = time.perf_counter()
         try:
             with modal.Queue.ephemeral() as progress:
-                call = self._cls().separate.spawn(audio, input_path.name, preset, progress.object_id)
-                output = self._wait(call, progress, preset, on_progress)
+                app_name, cls = self.app_name, self._cls
+                if prioritario and self._cls_pro is not None:
+                    app_name, cls = self.app_pro, self._cls_pro
+                try:
+                    call = cls().separate.spawn(audio, input_path.name, preset, progress.object_id)
+                except modal.exception.NotFoundError:
+                    if cls is self._cls:
+                        raise
+                    log.warning("Modal %s no está desplegada; se usa %s", app_name, self.app_name)
+                    app_name = self.app_name
+                    call = self._cls().separate.spawn(audio, input_path.name, preset, progress.object_id)
+                output = self._wait(call, progress, app_name, preset, on_progress)
             for stem, data in output["stems"].items():
                 flac = out_dir / f"{stem}.flac"
                 flac.write_bytes(data)
@@ -348,7 +365,7 @@ class ModalEngine:
         except Exception as exc:
             raise SeparationError(_friendly_modal_error(exc)) from exc
         if not result:
-            log.error("Modal %s (%s) terminó sin devolver pistas", self.app_name, preset)
+            log.error("Modal %s (%s) terminó sin devolver pistas", app_name, preset)
             raise SeparationError(_friendly_modal_error(RuntimeError("sin pistas")))
         stats = dict(output.get("stats", {}))
         stats.update(
@@ -356,7 +373,7 @@ class ModalEngine:
             bytes_sent=len(audio),
             bytes_received=sum(len(d) for d in output["stems"].values()),
         )
-        log.info("Modal %s (%s): %s", self.app_name, preset, stats)
+        log.info("Modal %s (%s): %s", app_name, preset, stats)
         _local.gpu_seconds = stats.get("gpu_seconds")
         return result
 
@@ -369,7 +386,9 @@ class FakeEngine:
     def device_info(self) -> dict:
         return {"engine": "fake", "cuda": False, "device": "simulado"}
 
-    def separate(self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb) -> Dict[str, Path]:
+    def separate(
+        self, input_path: Path, out_dir: Path, preset: str, on_progress: ProgressCb, prioritario: bool = False
+    ) -> Dict[str, Path]:
         spec = config.PRESETS[preset]
         out_dir.mkdir(parents=True, exist_ok=True)
         steps = 20

@@ -11,7 +11,7 @@
   const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
   const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
-  let planes = null;       // [{ nombre, precio_mensual, trabajos_por_mes, minutos_max_audio, mejor_calidad, minutos_guardado, historial }]
+  let planes = null;       // [{ nombre, precio_mensual, trabajos_por_mes, minutos_max_audio, mejor_calidad, minutos_guardado, historial, prioridad }]
   let diasPeriodo = 30;
 
   function guardado(minutos) {
@@ -25,6 +25,7 @@
     plan.trabajos_por_mes == null ? 'Audios ilimitados' : `${plan.trabajos_por_mes} audios cada ${diasPeriodo} días`,
     `Hasta ${plan.minutos_max_audio} minutos por audio`,
     plan.mejor_calidad ? 'Mejor calidad de separación' : 'Separación en calidad rápida',
+    ...(plan.prioridad ? ['Mayor velocidad de separación', 'Prioridad en la cola'] : []),
     plan.historial ? `Tus audios se guardan ${guardado(plan.minutos_guardado)} en «Mis audios»` : `Tus audios se guardan ${guardado(plan.minutos_guardado)}`,
   ];
 
