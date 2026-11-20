@@ -59,3 +59,19 @@ def test_listas_de_trabajos_y_pagos(cliente):
     adm = _admin(cliente)
     assert "trabajos" in cliente.get("/admin/trabajos", params={"estado": "completado"}, headers=adm).json()
     assert "pagos" in cliente.get("/admin/pagos", headers=adm).json()
+
+
+def test_base_de_datos(cliente):
+    email, cab = _usuario(cliente)
+    adm = _admin(cliente)
+    assert cliente.get("/admin/base", headers=cab).status_code == 403
+    assert cliente.get("/admin/base/usuarios", headers=cab).status_code == 403
+    tablas = {t["nombre"]: t["filas"] for t in cliente.get("/admin/base", headers=adm).json()}
+    assert tablas["usuarios"] >= 2 and "resultados" in tablas
+    datos = cliente.get("/admin/base/usuarios", headers=adm).json()
+    fila = next(f for f in datos["filas"] if email in f)
+    clave = datos["columnas"].index("password_hash")
+    assert fila[clave] == "••••"
+    sesiones = cliente.get("/admin/base/sesiones", headers=adm).json()
+    assert all(f[sesiones["columnas"].index("token")] == "••••" for f in sesiones["filas"])
+    assert cliente.get("/admin/base/no_existe", headers=adm).status_code == 404

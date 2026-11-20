@@ -25,11 +25,11 @@
   <meta name="twitter:card" content="summary_large_image">
   <!-- Al recargar con un trabajo abierto se muestra su panel desde el primer pintado (sin pasar por el inicio); index.js lo llena y quita la clase. -->
   <script>try { var v = sessionStorage.getItem('splitter-vista'); if (sessionStorage.getItem('splitter-trabajo') && (v === 'results' || v === 'job') && !/#(restablecer|sesion|error|verificar|conectado)=|^#inicio$/.test(location.hash)) { var r = document.documentElement; r.classList.add('is-restoring', 'restore-in'); r.dataset.restore = v; if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } } catch (e) {}</script>
-  <link rel="stylesheet" href="styles.css?v=fichas12">
+  <link rel="stylesheet" href="styles.css?v=como1">
   <script src="account.js?v=registro1" defer></script>
   <script src="ojo.js?v=ojo1" defer></script>
-  <script src="profile.js?v=registro1" defer></script>
-  <script src="index.js?v=reproductor1" defer></script>
+  <script src="profile.js?v=foto1" defer></script>
+  <script src="index.js?v=historial1" defer></script>
   <script src="script.js?v=luz2" defer></script>
   <script src="smoke.js?v=ligero1" defer></script>
   <script src="glass-gl.js?v=vidrio10" defer></script>
@@ -40,12 +40,14 @@
   <script type="module" src="login.js?v=registro1"></script>
 </head>
 <body>
+  <a class="skip-link" href="#flow-block">Saltar al contenido</a>
   <canvas id="smoke-canvas" class="smoke-canvas" aria-hidden="true"></canvas>
   <header class="site-header">
     <nav class="nav-inner" aria-label="Principal">
       <a class="brand" href="#top" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
       <div class="nav-actions">
-        <a class="nav-how" href="#mode-section">Cómo funciona</a>
+        <a class="nav-how" href="#upload-section">Cómo funciona</a>
+        <a class="nav-how" href="ayuda.html">Ayuda</a>
         <a id="nav-plan" class="primary-button nav-cta" href="planes.html" hidden>Planes</a>
         <button type="button" class="nav-login" data-open-login aria-haspopup="dialog">Inicia sesión</button>
         <button id="nav-register" type="button" class="nav-register" data-open-login aria-haspopup="dialog">Regístrate</button>
@@ -67,7 +69,8 @@
             </div>
             <button id="menu-verificar" class="menu-item menu-verify" type="button" hidden><svg class="menu-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M4.5 7l7.5 6 7.5-6"/></svg>Confirma tu correo · Reenviar enlace</button>
             <button id="menu-profile" class="menu-item menu-session" type="button" aria-haspopup="dialog"><svg class="menu-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c.7-3.7 3.6-5.6 7.2-5.6s6.5 1.9 7.2 5.6"/></svg>Perfil</button>
-            <a class="menu-item menu-mobile" href="#mode-section">Cómo funciona</a>
+            <a class="menu-item menu-mobile" href="#upload-section">Cómo funciona</a>
+            <a class="menu-item menu-mobile" href="ayuda.html">Ayuda</a>
             <a class="menu-item menu-mobile menu-guest" href="planes.html">Planes</a>
             <button type="button" class="menu-item menu-mobile menu-guest" data-open-login aria-haspopup="dialog">Iniciar sesión</button>
             <button id="menu-audios" class="menu-item menu-session" type="button"><svg class="menu-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg>Mis audios</button>
@@ -81,19 +84,36 @@
     </nav>
   </header>
 
-  <main id="top" class="workspace">
+  <main id="top" class="workspace" tabindex="-1">
     <div class="light" aria-hidden="true"></div>
     <section class="intro" aria-labelledby="page-title">
       <canvas id="wave-canvas" class="wave-canvas" aria-hidden="true"></canvas>
       <p class="eyebrow">Separador de audio</p>
       <h1 id="page-title">Tu audio, a tu manera.</h1>
       <p class="intro-description">Separa la voz, descubre cada instrumento o elimina el ruido. Dale espacio a lo que quieres escuchar.</p>
-      <div class="hero-actions"><a class="primary-button" href="#upload-section">Subir audio</a><a class="text-link" href="#mode-section">Cómo funciona <span aria-hidden="true">›</span></a></div>    </section>
+      <div class="hero-actions"><a class="primary-button" href="#upload-section">Subir audio</a><a class="text-link" href="#upload-section">Cómo funciona <span aria-hidden="true">›</span></a></div>    </section>
 
-    <div id="flow-block" class="flow-block">
+    <div id="flow-block" class="flow-block" tabindex="-1">
     <form id="splitter-form" class="studio-flow" novalidate>
+      <section id="upload-section" class="step upload-step" aria-labelledby="upload-title">
+        <div class="step-heading"><p class="eyebrow"><span class="step-number">01</span> Tu próxima mezcla empieza aquí</p><h2 id="upload-title">Sube tu audio</h2></div>
+        <div id="dropzone" class="dropzone">
+          <div id="upload-prompt" class="upload-prompt">
+            <p>Arrastra tu archivo aquí <span class="muted">o</span> <label for="audio-file" class="file-picker">elige uno <span aria-hidden="true">›</span></label></p>
+            <p class="file-formats" id="file-requirements">Comprobando los requisitos…</p>
+          </div>
+          <input id="audio-file" name="audio" type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus,.wma" aria-describedby="file-requirements file-error" class="sr-only">
+          <div id="file-summary" class="file-summary" hidden>
+            
+            <div class="file-details"><strong id="file-name"></strong><span id="file-meta"></span></div>
+            <button id="remove-file" type="button" class="remove-file" aria-label="Quitar archivo" title="Quitar archivo">×</button>
+          </div>
+        </div>
+        <p id="file-error" class="file-error" role="alert" hidden></p>
+      </section>
+
       <section id="mode-section" class="step mode-step" aria-labelledby="mode-title">
-        <div class="step-heading"><p class="eyebrow"><span class="step-number">01</span> Elige tu punto de partida</p><h2 id="mode-title">¿Qué quieres hacer?</h2></div>
+        <div class="step-heading"><p class="eyebrow"><span class="step-number">02</span> Elige tu punto de partida</p><h2 id="mode-title">¿Qué quieres hacer?</h2></div>
         <div class="mode-grid">
           <label class="mode-card">
             <input type="radio" name="mode" value="vocals">
@@ -125,25 +145,8 @@
         </div>
       </section>
 
-      <section id="upload-section" class="step upload-step" aria-labelledby="upload-title">
-        <div class="step-heading"><p class="eyebrow"><span class="step-number">02</span> Tu próxima mezcla empieza aquí</p><h2 id="upload-title">Sube tu audio</h2></div>
-        <div id="dropzone" class="dropzone">
-          <div id="upload-prompt" class="upload-prompt">
-            <p>Arrastra tu archivo aquí <span class="muted">o</span> <label for="audio-file" class="file-picker">elige uno <span aria-hidden="true">›</span></label></p>
-            <p class="file-formats" id="file-requirements">Comprobando los requisitos…</p>
-          </div>
-          <input id="audio-file" name="audio" type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus,.wma" aria-describedby="file-requirements file-error" class="sr-only">
-          <div id="file-summary" class="file-summary" hidden>
-            
-            <div class="file-details"><strong id="file-name"></strong><span id="file-meta"></span></div>
-            <button id="remove-file" type="button" class="remove-file" aria-label="Quitar archivo">×</button>
-          </div>
-        </div>
-        <p id="file-error" class="file-error" role="alert" hidden></p>
-      </section>
-
-      <section class="step tracks-step" aria-labelledby="tracks-title">
-        <div class="step-heading"><p class="eyebrow"><span class="step-number">03</span> Tú eliges qué conservar</p><h2 id="tracks-title">¿Qué quieres descargar?</h2></div>
+      <section class="step tracks-step">
+        <div id="tracks-heading" class="step-heading" hidden><p class="eyebrow"><span class="step-number">03</span> Tú eliges qué conservar</p><h2 id="tracks-title">¿Qué quieres descargar?</h2></div>
         <div id="tracks-section" hidden><div id="track-options" class="track-options"></div></div>
         <div class="action-row"><button id="start-button" class="primary-button btn-primary" type="submit" disabled><span id="action-label">Empezar</span><span aria-hidden="true">↗</span></button><p id="action-hint" class="action-hint" aria-live="polite">Elige qué quieres hacer.</p></div>
       </section>
@@ -162,17 +165,20 @@
     <section id="results-panel" class="panel results-panel" aria-labelledby="results-title" hidden>
       <h2 id="results-title" class="panel-title">¡Listo! Escucha y descarga</h2>
       <div class="player">
-        <button id="play-all" class="play-button" type="button" aria-label="Reproducir" disabled></button>
+        <button id="play-all" class="play-button" type="button" aria-label="Reproducir" title="Reproducir o pausar todas las pistas" disabled></button>
         <span id="time-now" class="time">0:00</span>
-        <input id="seek" class="range" type="range" min="0" max="0" step="0.01" value="0" aria-label="Posición de la reproducción" disabled>
+        <input id="seek" class="range" type="range" min="0" max="0" step="0.01" value="0" aria-label="Posición de la reproducción" title="Posición de la reproducción" disabled>
         <span id="time-total" class="time">0:00</span>
       </div>
-      <p id="player-status" class="panel-note" role="status" aria-live="polite"></p>
+      <p id="player-status" class="panel-note" role="status" aria-live="polite">Preparando la vista previa…</p>
+      <h3 class="panel-subtitle">Mezcla</h3>
       <ul id="track-list" class="track-list"></ul>
+      <button id="reset-mix" class="secondary-button reset-mix" type="button">Restablecer volumen</button>
       <p class="panel-note">El volumen es solo para escuchar: las descargas salen con cada pista completa.</p>
+      <h3 class="panel-subtitle">Descarga</h3>
       <div class="download-row">
         <button id="download-all" class="primary-button" type="button">Descargar todo</button>
-        <span id="format-label" class="format-label">Formato:</span>
+        <span id="format-label" class="format-label">Formato para todas las pistas:</span>
         <select id="format" class="select" aria-labelledby="format-label"></select>
       </div>
       <p id="expires" class="panel-note"></p>
@@ -183,11 +189,28 @@
     <footer class="workspace-footer"><span>Menos ruido. Más posibilidades.</span><span class="footer-label">Hecho para escuchar</span></footer>
     <nav class="pie-legal" aria-label="Información legal y ayuda"><span>© 2026 Splitter</span><a href="ayuda.html">Ayuda</a><a href="privacidad.html">Aviso de privacidad</a><a href="terminos.html">Términos y condiciones</a></nav>  </main>
 
+  <dialog id="how-dialog" class="wall how-dialog" aria-labelledby="how-title">
+    <h2 id="how-title">Cómo funciona</h2>
+    <ol class="how-steps">
+      <li><strong>Sube tu audio</strong><span>MP3, WAV, FLAC y otros formatos.</span></li>
+      <li><strong>Elige qué hacer</strong><span>Separar voz y música, separar instrumentos o limpiar ruido.</span></li>
+      <li><strong>Escucha y descarga</strong><span>Ajusta el volumen de cada pista y descarga las que quieras.</span></li>
+    </ol>
+    <div class="wall-actions"><button type="button" class="primary-button" data-cerrar>Entendido</button></div>
+  </dialog>
+  <dialog id="cancel-dialog" class="wall" aria-labelledby="cancel-title" aria-describedby="cancel-text">
+    <h2 id="cancel-title">¿Cancelar la separación?</h2>
+    <p id="cancel-text">Se descarta el audio que estás procesando y tendrás que subirlo de nuevo.</p>
+    <div class="wall-actions">
+      <button type="button" id="cancel-confirm" class="primary-button danger-button">Sí, cancelar</button>
+      <button type="button" id="cancel-keep" class="secondary-button">Seguir procesando</button>
+    </div>
+  </dialog>
   <dialog id="login-dialog" class="login-dialog" role="dialog" aria-modal="true" aria-labelledby="login-title">
     <div id="login-scrim" class="login-scrim"></div>
     <div id="login-panel" class="login-panel">
     <form id="login-form" class="login-form" novalidate>
-      <button id="login-close" type="button" class="dialog-close" aria-label="Cerrar">×</button>
+      <button id="login-close" type="button" class="dialog-close" aria-label="Cerrar" title="Cerrar">×</button>
       <div class="login-brand">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
         <span class="brand-word">Splitter</span>

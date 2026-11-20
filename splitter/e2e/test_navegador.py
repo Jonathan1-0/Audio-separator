@@ -53,8 +53,16 @@ def test_registro_con_codigo_y_separar(pagina, servidor, audio_wav):
     expect(pagina.locator("#menu-verificar")).to_be_hidden()
     pagina.keyboard.press("Escape")
 
+    # El paso 03 solo aparece al separar instrumentos
+    expect(pagina.locator("#tracks-heading")).to_be_hidden()
+    pagina.locator("input[name=mode][value=instruments]").check(force=True)
+    expect(pagina.locator("#tracks-heading")).to_be_visible()
+    pagina.locator("input[name=mode][value=clean]").check(force=True)
+    expect(pagina.locator("#tracks-heading")).to_be_hidden()
+
     # Separar un audio y descargar el ZIP
     pagina.locator("input[name=mode][value=vocals]").check(force=True)
+    expect(pagina.locator("#tracks-heading")).to_be_hidden()
     pagina.locator("#audio-file").set_input_files(str(audio_wav))
     pagina.locator("#start-button").click()
     expect(pagina.locator("#results-panel")).to_be_visible(timeout=60_000)
@@ -123,3 +131,39 @@ def test_todo_el_recuadro_abre_el_selector(pagina, audio_wav):
     pagina.mouse.click(caja["x"] + 40, caja["y"] + caja["height"] - 30)
     pagina.wait_for_timeout(500)
     assert abiertos == []
+
+
+def test_foto_de_perfil(pagina, tmp_path):
+    email = f"e2efoto_{uuid.uuid4().hex[:8]}@ejemplo.test"
+    _registrarse(pagina, email)
+    # PNG de 1x1
+    foto = tmp_path / "yo.png"
+    foto.write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+        "1f15c4890000000d49444154789c6360f8cfc0f01f0005000201e2a1a3"
+        "e40000000049454e44ae426082"))
+    _abrir_menu(pagina)
+    pagina.locator("#menu-profile").click()
+    # Se guarda sola al elegirla, sin pulsar "Guardar"
+    pagina.locator("#perfil-archivo").set_input_files(str(foto))
+    expect(pagina.locator("#perfil-guardar-foto")).to_be_hidden()
+    expect(pagina.locator("#perfil-mensaje")).to_be_hidden()
+    expect(pagina.locator("#perfil-foto")).to_have_attribute("src", re.compile(r"/auth/fotos/"))
+
+
+def test_atras_y_adelante_entre_pantallas(pagina, audio_wav):
+    pagina.goto("/")
+    pagina.locator("input[name=mode][value=vocals]").check(force=True)
+    pagina.locator("#audio-file").set_input_files(str(audio_wav))
+    pagina.locator("#start-button").click()
+    expect(pagina.locator("#results-panel")).to_be_visible(timeout=60_000)
+    # Atrás: vuelve al inicio sin perder el trabajo
+    pagina.go_back()
+    expect(pagina.locator("#splitter-form")).to_be_visible()
+    expect(pagina.locator("#results-panel")).to_be_hidden()
+    # Adelante: reabre los resultados
+    pagina.go_forward()
+    expect(pagina.locator("#results-panel")).to_be_visible(timeout=15_000)
+    # "Cómo funciona" en resultados abre la explicación
+    pagina.locator(".nav-how", has_text="Cómo funciona").click()
+    expect(pagina.locator("#how-dialog")).to_be_visible()

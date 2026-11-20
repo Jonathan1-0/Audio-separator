@@ -12,8 +12,8 @@
   const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', guitar: 'Guitarra', piano: 'Piano', other: 'Otros instrumentos', voice: 'Voz' };
   const stemLabel = (id) => STEM_LABELS[id] || id;
   // Pistas elegibles por modo (clean tiene una sola pista: no hay nada que elegir).
+  // Solo "Separar instrumentos" deja elegir pistas; los otros modos entregan todo
   const trackDefinitions = {
-    vocals: ['vocals', 'instrumental'],
     instruments: ['vocals', 'drums', 'bass', 'guitar', 'piano', 'other'],
   };
   const selectedTracks = Object.fromEntries(Object.entries(trackDefinitions).map(([key, ids]) => [key, new Set(ids)]));
@@ -230,7 +230,9 @@
   }
 
   function renderTracks() {
-    $('tracks-section').hidden = !(mode in trackDefinitions);
+    const conPistas = mode in trackDefinitions;
+    $('tracks-section').hidden = !conPistas;
+    $('tracks-heading').hidden = !conPistas;
     const visible = new Set(trackDefinitions[mode] || []);
     for (const [value, { label, input }] of trackChips) {
       label.hidden = !visible.has(value);
@@ -376,8 +378,46 @@
 
   // ---------- Vistas ----------
   const panels = { form, job: $('job-panel'), results: $('results-panel') };
+  // Atrás y Adelante del navegador recorren las pantallas (inicio, en proceso, resultados).
+  // Cada cambio de pantalla deja una entrada con el trabajo que mostraba; al volver se reabre ese trabajo.
+  let navegando = false;
+  const urlLimpia = () => location.pathname + location.search;
+  function anotarHistorial(name) {
+    if (navegando) return;
+    const estado = { vista: name, job: name === 'form' ? null : currentJob?.id || null };
+    const actual = history.state;
+    if (actual?.vista === estado.vista && actual?.job === estado.job) return;
+    // "En proceso" es de paso: al terminar (o cancelar) se reemplaza, así Atrás no vuelve a ella
+    if (!actual?.vista || actual.vista === 'job') history.replaceState(estado, '', urlLimpia());
+    else history.pushState(estado, '', urlLimpia());
+  }
+  // Sale del trabajo sin borrarlo, para que Adelante pueda volver a él (el servidor lo borra al vencer)
+  function salirSinBorrar() {
+    if (submitting) { cancelled = true; upload.xhr?.abort(); }
+    forgetJobId();
+    clearTracks();
+    stopFollowing();
+    currentJob = null;
+    submitting = false;
+    showView('form', { focus: false });
+    updateAction();
+  }
+  window.addEventListener('popstate', async (event) => {
+    const estado = event.state;
+    if (!estado?.vista) return;   // saltos a una sección (#...): los maneja el navegador
+    const vista = Object.keys(panels).find((key) => !panels[key].hidden);
+    if (estado.vista === vista && (estado.job || null) === (currentJob?.id || null)) return;
+    navegando = true;
+    try {
+      if (estado.vista === 'form' || !estado.job) salirSinBorrar();
+      else if (!(await window.abrirTrabajo(estado.job))) salirSinBorrar();   // ya venció
+    } finally { navegando = false; }
+  });
+
   function showView(name, { focus = true } = {}) {
     for (const [key, element] of Object.entries(panels)) element.hidden = key !== name;
+    document.documentElement.dataset.vista = name;   // en resultados se oculta la portada (styles.css)
+    anotarHistorial(name);
     try { sessionStorage.setItem('splitter-vista', name); } catch { /* sin almacenamiento */ }   // la usa el <head> al recargar
     if (!focus) return;
     const title = name === 'job' ? $('job-title') : name === 'results' ? $('results-title') : null;
@@ -643,11 +683,33 @@
     window.refrescarCuenta?.();   // el trabajo ya cuenta en el consumo del periodo
     currentJob = job;
     saveJobId(job.id);
+    if (history.state?.vista === 'job') history.replaceState({ vista: 'job', job: job.id }, '', urlLimpia());
     handleUpdate(job);
     if (currentJob) follow(job.id);
   });
 
+  // "Cómo funciona" lleva a los pasos; si están ocultos (en proceso o en resultados) se explican en una ventana
+  const howDialog = $('how-dialog');
+  document.addEventListener('click', (event) => {
+    const enlace = event.target.closest('a[href="#upload-section"]');
+    if (!enlace || form.getClientRects().length) return;   // el formulario se ve: el enlace funciona normal
+    event.preventDefault();
+    howDialog.showModal();
+  });
+  howDialog.addEventListener('click', (event) => {
+    if (event.target === howDialog || event.target.closest('[data-cerrar]')) howDialog.close();
+  });
+
+  // Confirmación con el diálogo de la página, no con confirm() del navegador
+  const cancelDialog = $('cancel-dialog');
   $('job-cancel').addEventListener('click', () => {
+    cancelDialog.showModal();
+    $('cancel-keep').focus();   // lo seguro queda a mano
+  });
+  $('cancel-keep').addEventListener('click', () => cancelDialog.close());
+  cancelDialog.addEventListener('click', (event) => { if (event.target === cancelDialog) cancelDialog.close(); });
+  $('cancel-confirm').addEventListener('click', () => {
+    cancelDialog.close();
     cancelled = true;
     forgetJobId();
     upload.xhr?.abort();
@@ -708,6 +770,7 @@
       thumb.style.transform = `translate3d(${x}px, -50%, 0)`;
       const filled = width ? (x + thumbWidth / 2) / width : 0;
       fill.style.transform = `translate3d(${(filled - 1) * 100}%, 0, 0)`;
+      wrap.style.setProperty('--filled', filled);   // ancho de la luz trasera
     }
     const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
     if ('ResizeObserver' in window) new ResizeObserver(() => { width = wrap.clientWidth; thumbWidth = thumb.offsetWidth; paint(); }).observe(wrap);
@@ -871,6 +934,8 @@
     audio.preload = 'auto';
     audio.src = stem.preview_url;
     const track = { audio, volume: 1, muted: false, gain: null, source: null };
+    // Para «Restablecer volumen»: vuelve al 100 % y quita el silencio.
+    track.reset = () => { if (track.muted) mute.click(); range.value = '100'; range.dispatchEvent(new Event('input', { bubbles: true })); };
     mute.addEventListener('click', () => {
       track.muted = !track.muted;
       aplicarVolumen(track);
@@ -936,7 +1001,7 @@
     const mine = tracks;
     mine[0]?.audio.addEventListener('ended', () => { pauseAll(); seekAll(0); });
     // Al recargar no se muestra: la linea aparecia y desaparecia, moviendo las pistas.
-    $('player-status').textContent = document.documentElement.classList.contains('is-restoring') ? '' : 'Cargando pistas…';
+    $('player-status').textContent = document.documentElement.classList.contains('is-restoring') ? '' : 'Preparando la vista previa…';
     // true si las pistas se pueden escuchar; lo espera la restauracion al recargar.
     previewReady = Promise.all(mine.map((track) => metadataReady(track.audio))).then(() => {
       if (tracks !== mine) return false;   // ya se paso a otro audio
@@ -1031,6 +1096,8 @@
   }
   $('download-all').addEventListener('click', () => { if (currentJob) prepareDownload($('download-all'), currentJob.download_all_url); });
 
+  $('reset-mix').addEventListener('click', () => { for (const track of tracks) track.reset?.(); });
+
   $('again').addEventListener('click', () => {
     forgetJobId();
     clearTracks();
@@ -1052,7 +1119,7 @@
     submitting = false;
     showView('form', { focus: false });
     updateAction();
-    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    if (location.hash) history.replaceState(history.state, '', location.pathname + location.search);
     window.scrollTo({ top: 0, behavior: reduced.matches ? 'auto' : 'smooth' });
   });
 
@@ -1082,6 +1149,7 @@
   updateAction();
   syncMode();
   loadConfig();
+  if (!history.state?.vista) history.replaceState({ vista: 'form', job: null }, '', location.href);
 
   // Al recargar con un trabajo en curso o con resultados, se vuelve a ese punto.
   // El <head> ya muestra el panel guardado (html.is-restoring + data-restore) y el final del <body> coloca el scroll,
@@ -1107,7 +1175,7 @@
   }
   (async () => {
     // Llegada desde el logo de otra pagina (index.html#inicio): siempre al inicio.
-    if (location.hash === '#inicio') { forgetJobId(); history.replaceState(null, '', location.pathname + location.search); }
+    if (location.hash === '#inicio') { forgetJobId(); history.replaceState(history.state, '', location.pathname + location.search); }
     const id = /#(restablecer|sesion|error|verificar|conectado)=/.test(location.hash) ? '' : savedJobId();   // esos hash los manejan otros scripts
     if (!id) { reveal(); return; }
     const safety = setTimeout(reveal, 2500);   // nunca dejar el contenido oculto

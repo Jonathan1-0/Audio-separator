@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 
-from ..database import SessionLocal, ahora_utc
+from ..database import Base, SessionLocal, ahora_utc
 from ..models.tablas import Pago, Plan, Suscripcion, Trabajo, Usuario
 from ..repositories import usuarios as repo_usuarios
 from .cuotas import plan_vigente
@@ -178,3 +178,45 @@ def pagos(pagina: int = 1) -> dict:
             for p, email, plan in filas
         ]
         return {"total": total, "pagina": pagina, "por_pagina": POR_PAGINA, "pagos": lista}
+
+
+# Vista de la base: tablas completas en solo lectura, sin columnas secretas
+OCULTAS = {"password_hash", "totp_secreto", "token", "token_pasarela"}
+
+
+def _valor(columna: str, valor):
+    if columna in OCULTAS and valor is not None:
+        return "••••"
+    if valor is None or isinstance(valor, (bool, int, float)):
+        return valor
+    return f"{valor.isoformat()}Z" if hasattr(valor, "isoformat") else str(valor)
+
+
+def base_tablas() -> list[dict]:
+    with SessionLocal() as db:
+        return [
+            {"nombre": nombre, "filas": db.scalar(select(func.count()).select_from(tabla)) or 0}
+            for nombre, tabla in Base.metadata.tables.items()
+        ]
+
+
+def base_filas(nombre: str, pagina: int = 1) -> dict:
+    tabla = Base.metadata.tables.get(nombre)
+    if tabla is None:
+        raise HTTPException(404, "Esa tabla no existe.")
+    pagina = max(1, pagina)
+    columnas = [c.name for c in tabla.columns]
+    orden = [c.desc() for c in tabla.primary_key.columns]
+    with SessionLocal() as db:
+        total = db.scalar(select(func.count()).select_from(tabla)) or 0
+        filas = db.execute(
+            select(tabla).order_by(*orden).offset((pagina - 1) * POR_PAGINA).limit(POR_PAGINA)
+        ).mappings().all()
+    return {
+        "tabla": nombre,
+        "columnas": columnas,
+        "filas": [[_valor(c, f[c]) for c in columnas] for f in filas],
+        "total": total,
+        "pagina": pagina,
+        "por_pagina": POR_PAGINA,
+    }

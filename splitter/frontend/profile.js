@@ -254,6 +254,7 @@
     descartarFoto();
     fotoPendiente = { archivo, url: URL.createObjectURL(archivo) };   // vista previa; aun no esta guardada
     pintar();
+    guardarFoto();   // se sube al elegirla; si falla, queda "Guardar" para reintentar
   }
 
   async function guardarFoto() {

@@ -60,18 +60,22 @@ def preparar_base() -> None:
 
 
 def preparar_admin() -> None:
-    """Crea o actualiza la cuenta de administrador."""
-    email, password = config.ADMIN_EMAIL, config.ADMIN_PASSWORD
+    _preparar_admin(config.ADMIN_EMAIL, config.ADMIN_PASSWORD, config.ADMIN_NOMBRE)
+    _preparar_admin(config.ADMIN2_EMAIL, config.ADMIN2_PASSWORD, config.ADMIN2_NOMBRE)
+
+
+def _preparar_admin(email: str, password: str, nombre: str) -> None:
+    """Crea o actualiza una cuenta de administrador."""
     if not email or not password:
         return
     if len(password) < 8 or len(password.encode()) > 72:
-        log.warning("SPLITTER_ADMIN_PASSWORD debe tener entre 8 y 72 caracteres; no se creó la cuenta de administrador")
+        log.warning("SPLITTER_ADMIN_PASSWORD debe tener entre 8 y 72 caracteres; no se creó la cuenta de administrador %s", email)
         return
     with SessionLocal() as db:
         usuario = repo_usuarios.buscar_por_email(db, email)
         if usuario is None:
             hash_ = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-            usuario = repo_usuarios.crear(db, email, config.ADMIN_NOMBRE, hash_)
+            usuario = repo_usuarios.crear(db, email, nombre, hash_)
         elif not bcrypt.checkpw(password.encode(), usuario.password_hash.encode()):
             usuario.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         usuario.estado = "activo"

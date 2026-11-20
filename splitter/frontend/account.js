@@ -453,11 +453,13 @@
       if (event.key === 'ArrowDown' && menuHasItems()) { event.preventDefault(); openMenu(true); }
     });
     profileMenu.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       const items = focusables();
       const index = items.indexOf(document.activeElement);
       event.preventDefault();
-      items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+      if (event.key === 'Home') items[0]?.focus();
+      else if (event.key === 'End') items[items.length - 1]?.focus();
+      else items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
     });
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && !profileMenu.hidden) closeMenu({ returnFocus: true });

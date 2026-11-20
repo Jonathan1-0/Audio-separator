@@ -37,6 +37,8 @@ html { scroll-padding-top: 88px; scroll-behavior: smooth; }
    guardadas ya dibujadas (final de index.html); index.js lo llena y quita .is-restoring. Nada se oculta. */
 html.is-restoring #splitter-form { display: none !important; }
 html[data-restore="results"] #results-panel[hidden], html[data-restore="job"] #job-panel[hidden] { display: block !important; }
+/* En la descarga solo queda el recuadro de resultados: sin la portada de arriba */
+html:is([data-vista="results"], [data-restore="results"]) .intro { display: none; }
 /* Pista dibujada antes de tener datos (al recargar): la pastilla al final, como un volumen al 100%. */
 .glass-range-ghost .glass-range-thumb { left: auto; right: 0; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.5 var(--font-body); letter-spacing: 0; word-spacing: normal; -webkit-font-smoothing: antialiased; }
@@ -120,11 +122,11 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .step { scroll-margin-top: 88px; }
 .studio-flow { display: grid; grid-template-columns: minmax(0, 1fr); }
 /* Bloque A (01) respira con padding propio; el hueco hacia el bloque B (02 + 03) es solo espacio: sin lineas ni cambio de fondo. */
-.mode-step { grid-column: 1 / -1; padding-top: clamp(48px, 6vw, 88px); padding-bottom: clamp(80px, 10vw, 150px); }
+.mode-step { grid-column: 1 / -1; padding-bottom: clamp(80px, 10vw, 150px); }
 .mode-step h2 { font-size: clamp(30px, 3.6vw, 46px); }
 /* Bloque B (02 + 03): una sola columna, centrada, con aire entre eyebrow, titulo, contenido y entre pasos. */
 .upload-step, .tracks-step { text-align: center; }
-.upload-step { margin-bottom: clamp(56px, 7vw, 96px); }
+.upload-step { padding-top: clamp(48px, 6vw, 88px); margin-bottom: clamp(56px, 7vw, 96px); }
 .upload-step .step-heading, .tracks-step .step-heading { margin: 0 auto clamp(28px, 3.5vw, 44px); }
 .upload-step .eyebrow, .tracks-step .eyebrow { margin-bottom: 20px; }
 .upload-step h2, .tracks-step h2 { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
@@ -148,6 +150,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .mode-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 36px 32px; border-radius: 32px; outline: 2px solid transparent; outline-offset: 3px; }
 /* Opciones elegibles: sin marcar, transparentes con borde; marcadas, el vidrio (glass.js) y texto mas claro. */
 :is(.mode-card, .quality-pill, .track-chip) { border: 1px solid var(--line); background: transparent; color: var(--text-2); }
+:is(.mode-card, .quality-pill) { border-color: transparent; }   /* sin línea en las opciones sin elegir */
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { border-color: var(--line-strong); color: var(--text); }
 :is(.mode-card, .quality-pill, .track-chip):has(input:checked) :is(.mode-description, .mode-caption) { color: var(--text); }
 .no-glass :is(.mode-card, .quality-pill, .track-chip):has(input:checked) { background: var(--bg-2); }
@@ -170,7 +173,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .mode-caption { margin-top: auto; padding-top: 28px; color: var(--text-2); font-size: 15px; font-weight: 500; }
 .quality-accordion { margin-top: clamp(32px, 4vw, 44px); }
 .quality-accordion:has(> [hidden]) { margin-top: 0; }
-.quality-options { position: relative; display: flex; flex-wrap: wrap; width: fit-content; max-width: 100%; gap: 6px; margin: 0 auto; padding: 6px; border: 1px solid var(--line); border-radius: 36px; background: transparent; min-width: 0; }
+.quality-options { position: relative; display: flex; flex-wrap: wrap; width: fit-content; max-width: 100%; gap: 6px; margin: 0 auto; padding: 6px; border: 0; border-radius: 36px; background: transparent; min-width: 0; }
 .quality-options .quality-pill { position: relative; flex: 1; min-width: 0; padding: 22px 36px; border-radius: 30px; text-align: center; }
 .quality-pill strong { font-size: 20px; font-weight: 500; }
 .quality-pill small { display: block; max-width: 28ch; margin-top: 6px; font-size: 15px; line-height: 1.4; }
@@ -315,6 +318,15 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 .wall p { margin: 0 0 24px; color: var(--text-2); font-size: 16px; line-height: 1.5; text-wrap: pretty; }
 .wall-actions { display: grid; gap: 10px; }
 .wall-actions button, .wall-actions a { width: 100%; }
+.how-dialog { text-align: left; }
+.how-dialog h2 { text-align: center; }
+.how-steps { display: grid; gap: 16px; margin: 8px 0 28px; padding: 0; list-style: none; counter-reset: paso; }
+.how-steps li { position: relative; display: grid; gap: 2px; padding-left: 44px; counter-increment: paso; }
+.how-steps li::before { content: counter(paso); position: absolute; top: 0; left: 0; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+.how-steps strong { font-size: 16px; font-weight: 600; }
+.how-steps span { color: var(--text-2); font-size: 15px; line-height: 1.45; }
+.danger-button { background: #c4302b; color: #fff; }
+.danger-button:not(:disabled):hover { background: #d63a34; }
 /* Ventana de limite de separaciones: "Volver" con flecha, discreto bajo "Ver planes". */
 .back-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; background: none; color: var(--text-2); font-size: 16px; font-weight: 500; }
 .back-button:hover { color: var(--text); }
@@ -384,10 +396,18 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 .panel-title { margin-bottom: 20px; }
 .panel-note { margin: 16px 0 0; color: var(--text-2); font-size: 15px; }
 .job-file { margin: 0 0 24px; color: var(--text-2); font-size: 15px; overflow-wrap: anywhere; }
-.progress { position: relative; height: 8px; overflow: hidden; border-radius: 999px; background: var(--line); }
-.progress-fill { position: absolute; inset: 0 auto 0 0; width: 100%; border-radius: inherit; background: var(--accent-fill); transform: scaleX(var(--p, 0)); transform-origin: 0 50%; transition: transform 300ms var(--ease); }
-.progress.is-indeterminate .progress-fill { width: 35%; transform: none; transition: none; animation: progress-slide 1.4s var(--ease) infinite; }
-@keyframes progress-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+/* Barra de progreso: tubo de vidrio hundido; el líquido claro tiene una luz detrás que se derrama alrededor */
+.progress { position: relative; isolation: isolate; height: 12px; border-radius: 999px; background: rgba(255, 255, 255, .035); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .7), inset 0 -1px 0 rgba(255, 255, 255, .07), 0 1px 0 rgba(255, 255, 255, .04); }
+/* Luz trasera: copia borrosa del líquido, detrás de todo */
+.progress::before { content: ""; position: absolute; inset: -2px auto -2px 0; z-index: -1; width: calc(var(--p, 0) * 100%); border-radius: inherit; background: rgba(255, 255, 255, .75); filter: blur(10px); opacity: .55; transition: width 300ms var(--ease); pointer-events: none; }
+.progress-fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 0) * 100%); overflow: hidden; border-radius: inherit; background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(236, 238, 242, .72) 55%, rgba(205, 210, 220, .6)); box-shadow: 0 0 6px rgba(255, 255, 255, .45), 0 0 16px rgba(255, 255, 255, .25); transition: width 300ms var(--ease); }
+.progress-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0, rgba(255, 255, 255, .85) 50%, transparent 100%) no-repeat; background-size: 30% 100%; animation: progress-brillo 1.8s ease-in-out infinite; }
+@keyframes progress-brillo { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+/* Sin porcentaje: el tubo queda vacío y solo lo cruza el brillo */
+.progress.is-indeterminate { overflow: hidden; }
+.progress.is-indeterminate::before { display: none; }
+.progress.is-indeterminate .progress-fill { width: 100%; transition: none; background: none; box-shadow: none; }
+.progress.is-indeterminate .progress-fill::after { background-size: 35% 100%; animation-duration: 1.4s; }
 .job-message { margin: 20px 0 0; font-size: 18px; font-weight: 500; }
 .job-detail { min-height: 1.5em; margin: 6px 0 24px; color: var(--text-2); font-size: 15px; }
 .secondary-button { min-height: 44px; padding: 10px 22px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font-size: 16px; font-weight: 500; }
@@ -416,6 +436,10 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 .glass-range { --thumb-w: 34px; --thumb-h: 22px; position: relative; min-width: 0; height: 32px; }
 .glass-range-track { position: absolute; top: 50%; left: 0; right: 0; height: 8px; margin-top: -4px; overflow: hidden; border-radius: 999px; background: var(--line); }
 .glass-range-fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(117deg, var(--accent) 0%, var(--accent-fill) 100%); transform: translate3d(0, 0, 0); will-change: transform; }
+/* Volumen y canción: mismo tubo de vidrio que la barra de progreso, líquido claro con luz detrás */
+.glass-range::before { content: ""; position: absolute; top: 50%; left: 0; width: calc(var(--filled, 0) * 100%); height: 12px; margin-top: -6px; border-radius: 999px; background: rgba(255, 255, 255, .75); filter: blur(10px); opacity: .55; pointer-events: none; }
+.glass-range .glass-range-track { background: rgba(255, 255, 255, .035); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .7), inset 0 -1px 0 rgba(255, 255, 255, .07), 0 1px 0 rgba(255, 255, 255, .04); }
+.glass-range .glass-range-fill { background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(236, 238, 242, .72) 55%, rgba(205, 210, 220, .6)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); }
 .glass-range-thumb { position: absolute; top: 50%; left: 0; z-index: 2; width: var(--thumb-w); height: var(--thumb-h); pointer-events: none; transform: translate3d(0, -50%, 0); will-change: transform; }
 .glass-range-knob { position: absolute; inset: 0; overflow: hidden; border-radius: 999px; background-color: var(--text); transition: transform 200ms var(--ease), background-color 200ms var(--ease); }
 .glass-range-lens, .glass-range-tint, .glass-range-shine { position: absolute; inset: 0; border-radius: inherit; opacity: 0; transition: opacity 200ms var(--ease); }
@@ -434,12 +458,11 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 /* Barra de reproduccion (#seek) con la misma pastilla: ocupa el hueco del reproductor y, mientras suena, la pastilla
    y el relleno se deslizan entre las actualizaciones (250 ms, lineal) para avanzar sin saltos. Al arrastrar, sin retardo. */
 .glass-range-seek { flex: 1; --thumb-w: 14px; --thumb-h: 14px; }
-/* Progreso de la reproduccion: azul con toque de vidrio liquido (brillo arriba, canto claro, base mas profunda). */
-.glass-range-seek .glass-range-fill { background: linear-gradient(to bottom, color-mix(in srgb, var(--text) 42%, transparent) 0%, color-mix(in srgb, var(--text) 8%, transparent) 45%, transparent 60%), linear-gradient(117deg, color-mix(in srgb, var(--accent) 88%, transparent) 0%, color-mix(in srgb, var(--accent-fill) 72%, transparent) 100%); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 55%, transparent), inset 0 -1px 1px color-mix(in srgb, var(--bg) 40%, transparent), inset -2px 0 3px color-mix(in srgb, var(--text) 30%, transparent); }
 /* La pastilla de la barra de reproduccion es un circulo (14x14) con el mismo vidrio. */
 .glass-range-seek.is-active .glass-range-knob { transform: scale(1.3); }
 .glass-range-seek.is-active .glass-range-lens { -webkit-backdrop-filter: url(#glass-range-circle) blur(.3px) saturate(1.1); backdrop-filter: url(#glass-range-circle) blur(.3px) saturate(1.1); }
 .glass-range-seek.is-playing:not(.is-active) :is(.glass-range-thumb, .glass-range-fill) { transition: transform 250ms linear; }
+.glass-range-seek.is-playing:not(.is-active)::before { transition: width 250ms linear; }
 .track-row strong { font-size: 17px; font-weight: 500; }
 .track-vol { color: var(--text-2); font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
 /* Silenciar una pista: el volumen elegido se conserva y se ve atenuado */
@@ -518,7 +541,7 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .progress.is-indeterminate .progress-fill { width: 100%; opacity: .5; }
+  .progress.is-indeterminate .progress-fill::after { background-size: 100% 100%; opacity: .35; }
   .reveal-pending, .reveal-ready, .primary-button:not(:disabled):hover { opacity: 1; transform: none; }
 }
 
@@ -570,3 +593,20 @@ html.restore-in :is(#results-panel, #job-panel) { animation: panel-in 400ms var(
 
 /* Perfil: acciones de las filas (Google) */
 .profile-row-action { min-height: 40px; padding: 6px 10px; font-size: 15px; }
+
+/* ---- Accesibilidad y teclado (correcciones de la Plantilla 3) ---- */
+/* Enlace para saltar al contenido: solo se ve al enfocarlo con Tab. */
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 12px 20px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 500; transform: translateY(-200%); }
+.skip-link:focus-visible { transform: none; outline: 2px solid var(--accent); outline-offset: 3px; }
+#top:focus, #flow-block:focus { outline: none; }
+/* La opcion elegida no depende solo del color: lleva una marca con texto o forma. */
+.mode-card:has(input:checked) .mode-caption::before { content: "✓ Seleccionado · "; }
+.quality-pill:has(input:checked) strong::before, .track-chip:has(input:checked)::before { content: "✓ "; }
+.track-chip:has(input:checked)::before { margin-right: 6px; }
+/* Subtitulos de la pantalla de resultados y boton para restablecer el volumen. */
+.panel-subtitle { margin: 28px 0 0; font-size: 15px; font-weight: 500; color: var(--text-2); }
+.reset-mix { margin-top: 16px; }
+
+/* Planes: mismo encabezado que el inicio (marca a la izquierda, enlaces a la derecha). */
+.plans-header { display: block; padding: 0; border-bottom: 1px solid var(--line); }
+.plans-header .brand { grid-column: auto; }

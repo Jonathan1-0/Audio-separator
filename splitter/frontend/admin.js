@@ -183,7 +183,25 @@
     paginas('paginas-pagos', datos, cargarPagos);
   }
 
-  const CARGAR = { resumen: cargarResumen, usuarios: cargarUsuarios, trabajos: cargarTrabajos, pagos: cargarPagos };
+  // ---------- Base de datos ----------
+  async function cargarBase(pagina = 1) {
+    const select = $('base-tabla');
+    if (!select.options.length) {
+      const tablas = await api('/admin/base');
+      select.replaceChildren(...tablas.map((t) => el('option', { value: t.nombre, textContent: `${t.nombre} (${numero(t.filas)})` })));
+    }
+    const datos = await api(`/admin/base/${encodeURIComponent(select.value)}?${new URLSearchParams({ pagina })}`);
+    const columnas = datos.columnas.map((nombre, i) => ({
+      titulo: nombre,
+      valor: (f) => (f[i] === null ? '—' : typeof f[i] === 'boolean' ? (f[i] ? 'Sí' : 'No') : f[i]),
+      num: typeof datos.filas[0]?.[i] === 'number',
+    }));
+    tabla('tabla-base', columnas, datos.filas, 'Tabla vacía.');
+    paginas('paginas-base', datos, cargarBase);
+  }
+  $('base-tabla').addEventListener('change', () => cargarBase(1));
+
+  const CARGAR = { resumen: cargarResumen, usuarios: cargarUsuarios, trabajos: cargarTrabajos, pagos: cargarPagos, base: cargarBase };
 
   // ---------- Inicio ----------
   (async () => {

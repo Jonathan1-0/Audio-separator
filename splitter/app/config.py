@@ -60,6 +60,10 @@ MAX_FOTO_BYTES = 2 * 1024 * 1024
 ADMIN_EMAIL = os.getenv("SPLITTER_ADMIN_EMAIL", "").strip().lower()
 ADMIN_PASSWORD = os.getenv("SPLITTER_ADMIN_PASSWORD", "")
 ADMIN_NOMBRE = os.getenv("SPLITTER_ADMIN_NOMBRE", "Administrador").strip() or "Administrador"
+# Segunda cuenta de administrador (opcional)
+ADMIN2_EMAIL = os.getenv("SPLITTER_ADMIN2_EMAIL", "").strip().lower()
+ADMIN2_PASSWORD = os.getenv("SPLITTER_ADMIN2_PASSWORD", "")
+ADMIN2_NOMBRE = os.getenv("SPLITTER_ADMIN2_NOMBRE", "Administrador").strip() or "Administrador"
 # Trabajos a la vez. Igual que SPLITTER_MAX_CONTAINERS en modal_app.py
 PARALLEL_JOBS = _int("SPLITTER_PARALLEL_JOBS", 3)
 

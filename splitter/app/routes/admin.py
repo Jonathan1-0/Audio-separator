@@ -54,3 +54,13 @@ def trabajos(estado: str = "", pagina: int = 1, _admin: Usuario = Depends(solo_a
 @router.get("/pagos")
 def pagos(pagina: int = 1, _admin: Usuario = Depends(solo_admin)):
     return admin.pagos(pagina)
+
+
+@router.get("/base")
+def base_tablas(_admin: Usuario = Depends(solo_admin)):
+    return admin.base_tablas()
+
+
+@router.get("/base/{tabla}")
+def base_filas(tabla: str, pagina: int = 1, _admin: Usuario = Depends(solo_admin)):
+    return admin.base_filas(tabla, pagina)

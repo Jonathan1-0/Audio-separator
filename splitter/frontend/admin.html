@@ -12,8 +12,8 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="logo.png" sizes="any">
   <link rel="stylesheet" href="styles.css?v=fichas12">
-  <link rel="stylesheet" href="admin.css?v=1">
-  <script src="admin.js?v=1" defer></script>
+  <link rel="stylesheet" href="admin.css?v=2">
+  <script src="admin.js?v=2" defer></script>
 </head>
 <body class="admin-page">
   <header class="admin-top">
@@ -32,6 +32,7 @@
         <button role="tab" id="tab-usuarios" aria-controls="vista-usuarios" aria-selected="false" class="admin-tab" tabindex="-1">Usuarios</button>
         <button role="tab" id="tab-trabajos" aria-controls="vista-trabajos" aria-selected="false" class="admin-tab" tabindex="-1">Trabajos</button>
         <button role="tab" id="tab-pagos" aria-controls="vista-pagos" aria-selected="false" class="admin-tab" tabindex="-1">Pagos</button>
+        <button role="tab" id="tab-base" aria-controls="vista-base" aria-selected="false" class="admin-tab" tabindex="-1">Base de datos</button>
       </div>
 
       <section id="vista-resumen" role="tabpanel" aria-labelledby="tab-resumen" class="admin-vista">
@@ -66,6 +67,16 @@
       <section id="vista-pagos" role="tabpanel" aria-labelledby="tab-pagos" class="admin-vista" hidden>
         <div class="admin-tabla-caja"><table class="admin-tabla" id="tabla-pagos"></table></div>
         <nav class="admin-paginas" id="paginas-pagos" aria-label="Páginas de pagos"></nav>
+      </section>
+
+      <section id="vista-base" role="tabpanel" aria-labelledby="tab-base" class="admin-vista" hidden>
+        <div class="admin-filtros">
+          <label for="base-tabla">Tabla</label>
+          <select id="base-tabla"></select>
+          <span class="admin-nota">Solo lectura · contraseñas y tokens ocultos</span>
+        </div>
+        <div class="admin-tabla-caja"><table class="admin-tabla" id="tabla-base"></table></div>
+        <nav class="admin-paginas" id="paginas-base" aria-label="Páginas de la tabla"></nav>
       </section>
     </section>
   </main>

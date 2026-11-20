@@ -4,6 +4,7 @@ Cada correo va en texto plano y en HTML (mismo contenido), con el estilo de la p
 """
 import html
 import logging
+import os
 import smtplib
 from email.message import EmailMessage
 from typing import List, Optional
@@ -16,6 +17,10 @@ log = logging.getLogger("splitter.correo")
 def enviar(destino: str, asunto: str, texto: str, cuerpo_html: Optional[str] = None) -> None:
     if not config.SMTP_USER:
         log.info("Correo de prueba (no se envió, falta SPLITTER_SMTP_USER)\nPara: %s\nAsunto: %s\n%s", destino, asunto, texto)
+        return
+    # Seguro extra: si corre pytest, nunca se manda un correo real (aunque .env tenga el SMTP)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        log.info("Correo de prueba (no se envió, corren las pruebas)\nPara: %s\nAsunto: %s", destino, asunto)
         return
     mensaje = EmailMessage()
     mensaje["From"] = f"{config.SMTP_NOMBRE} <{config.SMTP_FROM or config.SMTP_USER}>"
