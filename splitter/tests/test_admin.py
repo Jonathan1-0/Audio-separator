@@ -14,7 +14,7 @@ def _admin(cliente):
 
 
 def _usuario(cliente):
-    email = f"adm_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"adm_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Usuario Panel", "password": PASSWORD})
     return email, _token(cliente, email, PASSWORD)
 

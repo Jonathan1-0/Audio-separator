@@ -1,23 +1,31 @@
 """Pruebas de perfil, foto, contraseña, Mis audios gratis, dueño de las descargas,
 cuota, renovación a la 1:00 a. m., Facebook y planes del seed."""
 from .conftest import registrar
+import io
 import time
 import uuid
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from PIL import Image
 
 from app import config
 from app.database import SessionLocal
 from app.repositories import suscripciones as repo_suscripciones
 from app.repositories import trabajos as repo_trabajos
 from app.seed import PLANES, _preparar_planes
-from app.services import correo, cuotas, social
+from app.services import correo, cuotas, perfil, social
 
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
-JPG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
-WEBP = b"RIFF\x00\x00\x00\x00WEBPVP8 " + b"\x00" * 64
+def _imagen(formato: str, tam=(40, 30), modo="RGB", **opciones) -> bytes:
+    salida = io.BytesIO()
+    Image.new(modo, tam, (200, 30, 90, 128) if modo == "RGBA" else (200, 30, 90)).save(salida, formato, **opciones)
+    return salida.getvalue()
+
+
+PNG = _imagen("PNG")
+JPG = _imagen("JPEG")
+WEBP = _imagen("WEBP")
 
 
 @pytest.fixture
@@ -34,7 +42,7 @@ def _codigo(texto: str) -> str:
 
 
 def _cuenta(cliente, password="clave-segura-1"):
-    email = f"perfil_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"perfil_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Perfil", "password": password})
     token = cliente.post("/auth/login", json={"email": email, "password": password}).cookies["splitter_sesion"]
     return email, {"Authorization": f"Bearer {token}"}
@@ -67,7 +75,7 @@ def test_cambiar_email_pide_confirmarlo(cliente, buzon):
     viejo, cab = _cuenta(cliente)
     otro, _ = _cuenta(cliente)
     assert cliente.patch("/auth/perfil", json={"email": otro.upper()}, headers=cab).status_code == 409
-    nuevo = f"nuevo_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    nuevo = f"nuevo_{uuid.uuid4().hex[:8]}@example.com"
     res = cliente.patch("/auth/perfil", json={"email": nuevo}, headers=cab)
     assert res.status_code == 200
     assert res.json()["email"] == viejo and res.json()["email_pendiente"] == nuevo
@@ -96,7 +104,36 @@ def test_subir_foto(cliente, contenido, tipo):
     url = res.json()["foto_url"]
     assert cliente.get("/suscripcion", headers=cab).json()["foto_url"] == url
     imagen = cliente.get(url)
-    assert imagen.status_code == 200 and imagen.headers["content-type"] == tipo and imagen.content == contenido
+    # Se guarda siempre en WebP; una imagen chica no se agranda
+    assert imagen.status_code == 200 and imagen.headers["content-type"] == "image/webp"
+    assert Image.open(io.BytesIO(imagen.content)).size == (40, 30)
+
+
+def test_foto_grande_se_reduce_y_se_endereza(cliente):
+    _, cab = _cuenta(cliente)
+    exif = Image.Exif()
+    exif[0x0112] = 6   # orientación del celular: girada 90°
+    exif[0x8825] = {2: (19.0, 26.0, 0.0)}   # GPS: no debe quedar en la foto guardada
+    grande = _imagen("JPEG", (3000, 2000), exif=exif)
+    url = cliente.put("/auth/perfil/foto", files={"foto": ("cel.jpg", grande)}, headers=cab).json()["foto_url"]
+    guardada = cliente.get(url).content
+    foto = Image.open(io.BytesIO(guardada))
+    assert foto.format == "WEBP" and foto.size == (341, 512)   # enderezada (vertical) y con lado mayor de 512
+    assert len(guardada) < len(grande) and not foto.getexif()
+
+
+def test_foto_con_transparencia_la_conserva(cliente):
+    _, cab = _cuenta(cliente)
+    url = cliente.put("/auth/perfil/foto", files={"foto": ("t.png", _imagen("PNG", modo="RGBA"))}, headers=cab).json()["foto_url"]
+    assert Image.open(io.BytesIO(cliente.get(url).content)).mode == "RGBA"
+
+
+def test_foto_rechaza_imagen_rota_y_bomba(cliente, monkeypatch):
+    _, cab = _cuenta(cliente)
+    rota = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64   # firma de PNG pero no es imagen
+    assert cliente.put("/auth/perfil/foto", files={"foto": ("r.png", rota)}, headers=cab).status_code == 415
+    monkeypatch.setattr(perfil, "MAX_PIXELES_FOTO", 100)
+    assert cliente.put("/auth/perfil/foto", files={"foto": ("b.png", PNG)}, headers=cab).status_code == 415
 
 
 def test_foto_nueva_borra_la_anterior(cliente):
@@ -246,7 +283,7 @@ def test_facebook_no_entra_a_una_cuenta_con_contrasena(cliente, facebook):
 
 
 def test_facebook_si_entra_a_su_propia_cuenta(cliente, facebook):
-    facebook["email"] = f"fb_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    facebook["email"] = f"fb_{uuid.uuid4().hex[:8]}@example.com"
     assert _entrar_con(cliente, "facebook").startswith("/#sesion=")
     assert _entrar_con(cliente, "facebook").startswith("/#sesion=")
 

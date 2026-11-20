@@ -11,3 +11,4 @@ cryptography
 bcrypt
 python-dotenv
 sentry-sdk
+Pillow

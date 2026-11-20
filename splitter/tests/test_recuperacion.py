@@ -24,7 +24,7 @@ def buzon(monkeypatch):
 
 
 def _cuenta_nueva(cliente) -> str:
-    email = f"prueba_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"prueba_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Prueba", "password": PASSWORD})
     return email
 
@@ -46,7 +46,7 @@ def test_pedir_enlace_envia_correo(cliente, buzon):
 
 
 def test_correo_sin_cuenta_responde_igual_y_no_envia(cliente, buzon):
-    res = cliente.post("/auth/recuperar", json={"email": "nadie@ejemplo.com"})
+    res = cliente.post("/auth/recuperar", json={"email": "nadie@example.com"})
     assert res.status_code == 200
     assert buzon == []
 
@@ -106,5 +106,5 @@ def test_password_nueva_muy_corta(cliente, buzon):
 def test_limite_de_solicitudes_por_ip(cliente, buzon, monkeypatch):
     monkeypatch.setattr(recuperacion._por_ip, "max_events", 2)
     recuperacion._por_ip._events.clear()
-    respuestas = [cliente.post("/auth/recuperar", json={"email": "nadie@ejemplo.com"}).status_code for _ in range(3)]
+    respuestas = [cliente.post("/auth/recuperar", json={"email": "nadie@example.com"}).status_code for _ in range(3)]
     assert respuestas == [200, 200, 429]

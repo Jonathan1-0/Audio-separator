@@ -36,14 +36,14 @@ def test_base_de_antes_de_alembic_se_actualiza():
     with motor.begin() as c:
         c.execute(text("DROP TABLE alembic_version"))
         c.execute(text("INSERT INTO usuarios (email, nombre, password_hash, estado, creado_en) "
-                       "VALUES ('viejo@ejemplo.com', 'Viejo', 'x', 'activo', '2026-01-01')"))
+                       "VALUES ('viejo@example.com', 'Viejo', 'x', 'activo', '2026-01-01')"))
     migrar(motor)
     columnas = {c["name"] for c in inspect(motor).get_columns("usuarios")}
     assert {"telefono", "foto", "proveedor", "email_verificado", "totp_activo", "google_id"} <= columnas
     with motor.connect() as c:
         fila = c.execute(text("SELECT email, proveedor, email_verificado, totp_activo FROM usuarios")).one()
         version = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert tuple(fila) == ("viejo@ejemplo.com", "email", 0, 0)
+    assert tuple(fila) == ("viejo@example.com", "email", 0, 0)
     assert version == "0007"
 
 
@@ -65,7 +65,7 @@ def test_migrar_una_base_con_datos():
     with motor.begin() as c:
         c.execute(text("PRAGMA foreign_keys=ON"))
         c.execute(text("INSERT INTO usuarios (id, email, nombre, password_hash, estado, creado_en, proveedor, email_verificado) "
-                       "VALUES (1, 'a@ejemplo.com', 'A', 'x', 'activo', '2026-01-01', 'email', 0)"))
+                       "VALUES (1, 'a@example.com', 'A', 'x', 'activo', '2026-01-01', 'email', 0)"))
         c.execute(text("INSERT INTO sesiones (usuario_id, token, expira_en, creado_en) VALUES (1, 't', '2027-01-01', '2026-01-01')"))
         c.execute(text("INSERT INTO planes (id, nombre, precio_mensual, trabajos_por_mes, minutos_max_audio, mejor_calidad) "
                        "VALUES (1, 'gratis', 0, 5, 5, 0)"))
@@ -83,7 +83,7 @@ def test_cuentas_de_google_quedan_sin_contrasena_propia():
     with motor.begin() as c:
         for i, proveedor in enumerate(("email", "google", "facebook"), start=1):
             c.execute(text("INSERT INTO usuarios (id, email, nombre, password_hash, estado, creado_en, proveedor) "
-                           f"VALUES ({i}, '{proveedor}@ejemplo.com', 'X', 'x', 'activo', '2026-01-01', '{proveedor}')"))
+                           f"VALUES ({i}, '{proveedor}@example.com', 'X', 'x', 'activo', '2026-01-01', '{proveedor}')"))
     migrar(motor)
     with motor.connect() as c:
         filas = dict(c.execute(text("SELECT proveedor, tiene_password FROM usuarios")).all())
@@ -96,7 +96,7 @@ def _base_0006_con_trabajo():
     migrar(motor, "0006")
     with motor.begin() as c:
         c.execute(text("INSERT INTO usuarios (id, email, nombre, password_hash, estado, creado_en, proveedor) "
-                       "VALUES (1, 'a@ejemplo.com', 'A', 'x', 'activo', '2026-01-01', 'email')"))
+                       "VALUES (1, 'a@example.com', 'A', 'x', 'activo', '2026-01-01', 'email')"))
         c.execute(text("INSERT INTO sesiones (usuario_id, token, expira_en, creado_en) VALUES (1, 't', '2027-01-01', '2026-01-01')"))
         c.execute(text("INSERT INTO trabajos (id, usuario_id, nombre_original, tamano_bytes, preset, pistas_pedidas, "
                        "estado, progreso, creado_en) VALUES ('t1', 1, 'x.mp3', 10, '4stem', 'drums,vocals', "

@@ -33,7 +33,7 @@ def _codigo(buzon) -> str:
 
 
 def _cuenta(cliente, buzon=None):
-    email = f"segura_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"segura_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Segura", "password": PASSWORD})
     res = cliente.post("/auth/login", json={"email": email, "password": PASSWORD})
     return email, {"Authorization": f"Bearer {res.cookies['splitter_sesion']}"}
@@ -87,7 +87,7 @@ def _registrar_sin_confirmar(cliente, email, password=PASSWORD):
 
 
 def test_registro_pide_el_codigo_del_correo(cliente, buzon):
-    email = f"nueva_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    email = f"nueva_{uuid.uuid4().hex[:8]}@example.com"
     res = _registrar_sin_confirmar(cliente, email)
     assert res.status_code == 201 and res.json()["pendiente"] and "Te enviamos un código" in res.json()["mensaje"]
     assert buzon[-1][0] == email
@@ -109,7 +109,7 @@ def test_registro_pide_el_codigo_del_correo(cliente, buzon):
 
 
 def test_registro_sin_confirmar_se_puede_rehacer(cliente, buzon):
-    email = f"rehacer_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    email = f"rehacer_{uuid.uuid4().hex[:8]}@example.com"
     _registrar_sin_confirmar(cliente, email, "clave-de-otro-1")
     res = _registrar_sin_confirmar(cliente, email, "mi-clave-buena-1")
     assert res.status_code == 201
@@ -119,23 +119,23 @@ def test_registro_sin_confirmar_se_puede_rehacer(cliente, buzon):
 
 
 def test_reenviar_codigo(cliente, buzon):
-    email = f"reenvio_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    email = f"reenvio_{uuid.uuid4().hex[:8]}@example.com"
     _registrar_sin_confirmar(cliente, email)
     antes = len(buzon)
     res = cliente.post("/auth/registro/reenviar", json={"email": email})
     assert res.status_code == 200 and res.json()["pendiente"] and len(buzon) == antes + 1
-    assert cliente.post("/auth/registro/reenviar", json={"email": "nadie@ejemplo.com"}).status_code == 404
+    assert cliente.post("/auth/registro/reenviar", json={"email": "nadie@example.com"}).status_code == 404
 
 
 def test_codigo_de_otro_registro_no_sirve(cliente, buzon):
-    _registrar_sin_confirmar(cliente, f"a_{uuid.uuid4().hex[:8]}@ejemplo.com")
+    _registrar_sin_confirmar(cliente, f"a_{uuid.uuid4().hex[:8]}@example.com")
     codigo_a = _codigo(buzon)
-    b = _registrar_sin_confirmar(cliente, f"b_{uuid.uuid4().hex[:8]}@ejemplo.com").json()
+    b = _registrar_sin_confirmar(cliente, f"b_{uuid.uuid4().hex[:8]}@example.com").json()
     assert cliente.post("/auth/registro/confirmar", json={"pendiente": b["pendiente"], "codigo": codigo_a}).status_code == 400
 
 
 def test_demasiados_codigos_incorrectos(cliente, buzon):
-    pendiente = _registrar_sin_confirmar(cliente, f"bloq_{uuid.uuid4().hex[:8]}@ejemplo.com").json()["pendiente"]
+    pendiente = _registrar_sin_confirmar(cliente, f"bloq_{uuid.uuid4().hex[:8]}@example.com").json()["pendiente"]
     for _ in range(5):
         cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": "111111"})
     res = cliente.post("/auth/registro/confirmar", json={"pendiente": pendiente, "codigo": _codigo(buzon)})
@@ -222,7 +222,7 @@ def test_limpieza_borra_sesiones_vencidas_y_trabajos_viejos(cliente):
         repo_trabajos.crear(db, id=viejo, usuario_id=usuario.id, nombre_original="x", tamano_bytes=1, preset="2stem",
                             pistas_pedidas="vocals", estado="completado",
                             creado_en=ahora_utc() - timedelta(days=config.DIAS_HISTORIAL_TRABAJOS + 1))
-    pendiente = f"vieja_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    pendiente = f"vieja_{uuid.uuid4().hex[:8]}@example.com"
     cliente.post("/auth/registro", json={"email": pendiente, "nombre": "Vieja", "password": PASSWORD})
     with SessionLocal() as db:
         repo_usuarios.buscar_por_email(db, pendiente).creado_en = ahora_utc() - timedelta(days=8)
@@ -237,7 +237,7 @@ def test_limpieza_borra_sesiones_vencidas_y_trabajos_viejos(cliente):
 
 
 def test_limites_se_guardan_en_disco(cliente):
-    cliente.post("/auth/login", json={"email": "nadie@ejemplo.com", "password": "loquesea1"})
+    cliente.post("/auth/login", json={"email": "nadie@example.com", "password": "loquesea1"})
     time.sleep(0.05)
     assert (config.DATA_DIR / "limite_login_ip.json").exists()
 
@@ -281,7 +281,7 @@ def _red(cliente, proveedor, cab=None, conectar=False):
 
 def test_conectar_facebook_y_entrar_con_el(cliente, google):
     email, cab = _cuenta(cliente)
-    google.update(email="correo-de-facebook@ejemplo.com", id=f"fb-{uuid.uuid4().hex}", sub="")
+    google.update(email="correo-de-facebook@example.com", id=f"fb-{uuid.uuid4().hex}", sub="")
     assert _red(cliente, "facebook", cab, conectar=True).headers["location"] == "/#conectado=facebook"
     assert cliente.get("/suscripcion", headers=cab).json()["facebook_conectado"] is True
     res = _red(cliente, "facebook")
@@ -318,7 +318,7 @@ def test_cuenta_de_google_crea_su_contrasena(cliente, google):
 def test_borrar_cuenta_de_google_pide_el_correo_aunque_lo_haya_cambiado(cliente, google, buzon):
     google.update(email=f"borrar_{uuid.uuid4().hex[:8]}@gmail.com", sub=f"g-{uuid.uuid4().hex}")
     cab = {"Authorization": f"Bearer {_red(cliente, 'google').cookies['splitter_sesion']}"}
-    nuevo = f"nuevo_{uuid.uuid4().hex[:8]}@ejemplo.com"
+    nuevo = f"nuevo_{uuid.uuid4().hex[:8]}@example.com"
     cliente.patch("/auth/perfil", json={"email": nuevo}, headers=cab)
     _confirmar_correo(cliente, buzon)  # el cambio de correo ya no exige contraseña después
     assert cliente.request("DELETE", "/auth/cuenta", json={"confirmacion": "otro@x.com"}, headers=cab).status_code == 403

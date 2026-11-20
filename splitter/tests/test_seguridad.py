@@ -1,4 +1,5 @@
 """Pruebas de seguridad: límites, cabeceras, verificación de correo, cerrar sesiones y borrar la cuenta."""
+from .test_perfil import PNG
 from .conftest import registrar
 import re
 import time
@@ -19,7 +20,7 @@ def buzon(monkeypatch):
 
 
 def _cuenta(cliente):
-    email = f"seg_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"seg_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Seg", "password": PASSWORD})
     token = cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).cookies["splitter_sesion"]
     return email, {"Authorization": f"Bearer {token}"}
@@ -51,15 +52,15 @@ def test_login_limite_por_ip(cliente, monkeypatch):
     monkeypatch.setattr(auth._login_por_ip, "max_events", 2)
     monkeypatch.setattr(auth._login_por_ip, "_events", type(auth._login_por_ip._events)(auth._login_por_ip._events.default_factory))
     for _ in range(2):
-        cliente.post("/auth/login", json={"email": "x@ejemplo.com", "password": "loquesea1"})
-    assert cliente.post("/auth/login", json={"email": "x@ejemplo.com", "password": "loquesea1"}).status_code == 429
+        cliente.post("/auth/login", json={"email": "x@example.com", "password": "loquesea1"})
+    assert cliente.post("/auth/login", json={"email": "x@example.com", "password": "loquesea1"}).status_code == 429
 
 
 def test_registro_limite_por_ip(cliente, monkeypatch):
     monkeypatch.setattr(auth._registros_por_ip, "max_events", 1)
     monkeypatch.setattr(auth._registros_por_ip, "_events", type(auth._registros_por_ip._events)(auth._registros_por_ip._events.default_factory))
     _cuenta(cliente)
-    res = registrar(cliente, json={"email": f"r_{uuid.uuid4().hex[:8]}@ejemplo.com", "nombre": "R", "password": PASSWORD})
+    res = registrar(cliente, json={"email": f"r_{uuid.uuid4().hex[:8]}@example.com", "nombre": "R", "password": PASSWORD})
     assert res.status_code == 429
 
 
@@ -147,7 +148,7 @@ def test_cambiar_password_avisa_por_correo(cliente, buzon):
 
 def test_borrar_cuenta(cliente, buzon, audio_wav):
     email, cab = _cuenta(cliente)
-    foto = cliente.put("/auth/perfil/foto", files={"foto": ("a.png", b"\x89PNG\r\n\x1a\n" + b"\0" * 20)}, headers=cab).json()["foto_url"]
+    foto = cliente.put("/auth/perfil/foto", files={"foto": ("a.png", PNG)}, headers=cab).json()["foto_url"]
     job = cliente.post("/api/jobs", files={"file": ("a.wav", audio_wav, "audio/wav")}, data={"preset": "2stem"}, headers=cab).json()
     limite = time.time() + 60
     while cliente.get(f"/api/jobs/{job['id']}", headers=cab).json()["status"] not in ("done", "error") and time.time() < limite:
@@ -169,7 +170,7 @@ def test_borrar_cuenta(cliente, buzon, audio_wav):
 
 # ---------- Sesión en cookie ----------
 def _login_cookie(cliente):
-    email = f"cookie_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    email = f"cookie_{uuid.uuid4().hex[:10]}@example.com"
     registrar(cliente, json={"email": email, "nombre": "Galleta", "password": PASSWORD})
     token = cliente.post("/auth/login", json={"email": email, "password": PASSWORD}).cookies["splitter_sesion"]
     return {"Cookie": f"splitter_sesion={token}"}

@@ -10,7 +10,7 @@ from app.services import social
 @pytest.fixture
 def proveedor_falso(monkeypatch):
     """Pone claves de prueba y simula la respuesta del proveedor."""
-    perfil = {"email": f"social_{uuid.uuid4().hex[:8]}@ejemplo.com", "name": "Persona Social", "email_verified": True}
+    perfil = {"email": f"social_{uuid.uuid4().hex[:8]}@example.com", "name": "Persona Social", "email_verified": True}
     for clave in ("google", "facebook"):
         monkeypatch.setitem(social.PROVEEDORES[clave], "id", "id-de-prueba")
         monkeypatch.setitem(social.PROVEEDORES[clave], "secreto", "secreto-de-prueba")

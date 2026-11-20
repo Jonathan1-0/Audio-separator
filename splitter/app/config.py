@@ -54,7 +54,8 @@ ZONA_HORARIA = os.getenv("SPLITTER_ZONA_HORARIA", "America/Mexico_City")
 HORA_RENOVACION = _int("SPLITTER_HORA_RENOVACION", 1)
 
 # Foto de perfil
-MAX_FOTO_BYTES = 2 * 1024 * 1024
+MAX_FOTO_MB = _int("SPLITTER_MAX_FOTO_MB", 10)
+MAX_FOTO_BYTES = MAX_FOTO_MB * 1024 * 1024
 
 # Cuenta de administrador (opcional, solo en .env)
 ADMIN_EMAIL = os.getenv("SPLITTER_ADMIN_EMAIL", "").strip().lower()

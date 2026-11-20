@@ -5,13 +5,13 @@
 //
 // Contrato que el backend debe ofrecer para que Guardar funcione (hoy NO existe; ver README del cambio):
 //   PATCH /auth/perfil        body JSON { nombre? | email? | telefono? } -> 200 con los campos actualizados
-//   PUT   /auth/perfil/foto   multipart, campo "foto" (png/jpg/webp, max 2 MB) -> 200 { foto_url }
+//   PUT   /auth/perfil/foto   multipart, campo "foto" (png/jpg/webp, max 10 MB) -> 200 { foto_url }
 //   GET   /suscripcion        debe incluir "telefono" y "foto_url" para mostrarlos al recargar
 (() => {
   'use strict';
   if (!window.crearDialogoCuenta) return;   // planes.html no carga el menu ni este modulo
 
-  const MAX_FOTO = 2 * 1024 * 1024;
+  const MAX_FOTO = 10 * 1024 * 1024;   // igual que SPLITTER_MAX_FOTO_MB del servidor
   const TIPOS_FOTO = ['image/png', 'image/jpeg', 'image/webp'];
   const RED = { google: 'Google', facebook: 'Facebook' };
 
@@ -248,7 +248,7 @@
     if (!archivo) return;
     if (!TIPOS_FOTO.includes(archivo.type) || archivo.size > MAX_FOTO) {
       event.target.value = '';
-      aviso($('#perfil-mensaje'), 'La foto debe ser PNG, JPG o WebP y pesar menos de 2 MB.');
+      aviso($('#perfil-mensaje'), 'La foto debe ser PNG, JPG o WebP y pesar menos de 10 MB.');
       return;
     }
     descartarFoto();
@@ -409,16 +409,21 @@
   }
 
   // ---------- Sesiones y borrar la cuenta ----------
-  async function cerrarTodas() {
+  // Pide confirmación antes: cierra la sesión también en este dispositivo.
+  function cerrarTodas() {
     if (ocupado) return;
-    ocupado = true;
-    try {
-      await window.apiCuenta('/auth/logout-todo', { method: 'POST' });
-      dialogo.close();
-      window.setSesion(null);
-    } catch (err) {
-      aviso($('#perfil-mensaje'), err.message);
-    } finally { ocupado = false; }
+    window.avisar(
+      '¿Cerrar sesión en todos los dispositivos?',
+      'Se cerrará tu sesión en todos lados, también en este. Tendrás que volver a iniciar sesión en cada dispositivo.',
+      {
+        confirmar: 'Cerrar sesión en todos',
+        onConfirm: async () => {   // si falla, el error sale en el mismo aviso
+          await window.apiCuenta('/auth/logout-todo', { method: 'POST' });
+          dialogo.close();
+          window.setSesion(null);
+        },
+      },
+    );
   }
 
   // Cuentas con contraseña la escriben; las de Google o Facebook escriben su correo.

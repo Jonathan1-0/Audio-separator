@@ -540,6 +540,7 @@
     refrescarCuenta,
     contratarPro,
     cancelarPro,
+    avisar,
   });
 
   // Enlace del correo: "/#verificar=CODIGO" confirma el correo o guarda el correo nuevo.

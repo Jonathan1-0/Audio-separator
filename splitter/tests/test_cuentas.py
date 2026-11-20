@@ -4,7 +4,7 @@ import uuid
 
 
 def _correo() -> str:
-    return f"prueba_{uuid.uuid4().hex[:10]}@ejemplo.com"
+    return f"prueba_{uuid.uuid4().hex[:10]}@example.com"
 
 
 def _registrar(cliente, email=None, password="clave-segura-1"):

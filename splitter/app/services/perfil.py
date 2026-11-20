@@ -1,10 +1,13 @@
 """Perfil: nombre, correo, teléfono, foto y contraseña."""
+import io
 import re
 import secrets
+import warnings
 from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import HTTPException
+from PIL import Image, ImageOps
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
@@ -15,6 +18,11 @@ from ..repositories import usuarios as repo_usuarios
 from . import auth, correo, verificacion
 
 CARPETA_FOTOS = config.DATA_DIR / "fotos"
+# Las fotos se guardan reducidas: lado mayor de 512 px (el avatar se ve mucho más chico), en WebP
+LADO_FOTO = 512
+CALIDAD_FOTO = 85
+# Contra "bombas" de descompresión: un archivo chico que dice medir 100 000 x 100 000 px
+MAX_PIXELES_FOTO = 50_000_000
 # Primeros bytes de cada tipo de imagen: no se confía en lo que diga el navegador
 _FIRMAS_IMAGEN = (
     (b"\x89PNG\r\n\x1a\n", "png"),
@@ -96,18 +104,43 @@ def _tipo_imagen(contenido: bytes) -> Optional[str]:
     return None
 
 
+def _reducir_foto(contenido: bytes) -> bytes:
+    """Abre la imagen de verdad, la endereza según el EXIF del celular, la reduce y la guarda en WebP.
+    De paso quita los metadatos (EXIF con ubicación GPS, modelo del teléfono, etc.)."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(contenido)) as imagen:
+                if imagen.format not in ("PNG", "JPEG", "WEBP"):
+                    raise ValueError(imagen.format)
+                if imagen.width * imagen.height > MAX_PIXELES_FOTO:
+                    raise ValueError("demasiados píxeles")
+                imagen.draft("RGB", (LADO_FOTO, LADO_FOTO))   # JPEG: decodifica ya reducido, más rápido
+                imagen = ImageOps.exif_transpose(imagen)
+                con_transparencia = imagen.mode in ("RGBA", "LA", "PA") or "transparency" in imagen.info
+                imagen = imagen.convert("RGBA" if con_transparencia else "RGB")
+                imagen.thumbnail((LADO_FOTO, LADO_FOTO), Image.Resampling.LANCZOS)
+                salida = io.BytesIO()
+                imagen.save(salida, "WEBP", quality=CALIDAD_FOTO, method=4)
+                return salida.getvalue()
+    except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise HTTPException(415, "No se pudo leer la foto. Usa una imagen PNG, JPG o WebP.") from None
+
+
 def guardar_foto(usuario_id: int, contenido: bytes) -> dict:
     if not contenido:
         raise HTTPException(400, "Elige una foto.")
     if len(contenido) > config.MAX_FOTO_BYTES:
-        raise HTTPException(413, "La foto debe pesar menos de 2 MB.")
+        raise HTTPException(413, f"La foto debe pesar menos de {config.MAX_FOTO_MB} MB.")
     tipo = _tipo_imagen(contenido)
     if tipo is None:
         raise HTTPException(415, "La foto debe ser PNG, JPG o WebP.")
 
+    reducida = _reducir_foto(contenido)
+
     CARPETA_FOTOS.mkdir(parents=True, exist_ok=True)
-    nombre = f"{usuario_id}_{secrets.token_hex(8)}.{tipo}"
-    (CARPETA_FOTOS / nombre).write_bytes(contenido)
+    nombre = f"{usuario_id}_{secrets.token_hex(8)}.webp"   # las de antes (png/jpg) se siguen sirviendo
+    (CARPETA_FOTOS / nombre).write_bytes(reducida)
     with SessionLocal() as db:
         usuario = repo_usuarios.buscar_por_id(db, usuario_id)
         anterior = usuario.foto
