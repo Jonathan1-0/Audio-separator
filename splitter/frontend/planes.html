@@ -22,21 +22,20 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Splitter: Tu audio, a tu manera.">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="styles.css?v=fichas12">
-  <script src="account.js?v=registro1" defer></script>
-  <script src="plans.js?v=prioridad1" defer></script>
+  <link rel="stylesheet" href="styles.css?v=proceso2">
+  <script src="account.js?v=salir1" defer></script>
+  <script src="plans.js?v=como1" defer></script>
 </head>
 <body class="plans-page">
   <a class="skip-link" href="#plans-title">Saltar al contenido</a>
   <main id="planes" class="plans" aria-labelledby="plans-title">
     <div class="plans-bg" aria-hidden="true"></div>
-    <svg class="plans-mark" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg>
 
     <header class="plans-header">
       <nav class="nav-inner" aria-label="Principal">
         <a class="brand" href="index.html#inicio" aria-label="Splitter, inicio"><svg class="brand-bars" viewBox="36 30 115 112" aria-hidden="true" focusable="false"><rect x="36" y="72" width="11" height="27" rx="5.5"/><rect x="53" y="51" width="11" height="69" rx="5.5"/><rect x="71" y="30" width="11" height="112" rx="5.5"/><rect x="105" y="30" width="11" height="112" rx="5.5"/><rect x="123" y="51" width="11" height="69" rx="5.5"/><rect x="140" y="72" width="11" height="27" rx="5.5"/></svg><span class="brand-name">Splitter</span></a>
         <div class="nav-actions">
-          <a class="nav-how" href="index.html#mode-section">Cómo funciona</a>
+          <a class="nav-how" href="#como-funciona">Cómo funciona</a>
           <a class="nav-how" href="ayuda.html">Ayuda</a>
           <a class="nav-how" href="index.html">Volver al inicio</a>
         </div>
@@ -51,5 +50,14 @@
     </div>
   </main>
   <nav class="pie-legal" aria-label="Información legal y ayuda"><span>© 2026 Splitter</span><a href="ayuda.html">Ayuda</a><a href="privacidad.html">Aviso de privacidad</a><a href="terminos.html">Términos y condiciones</a></nav>
+  <dialog id="how-dialog" class="wall how-dialog" aria-labelledby="how-title">
+    <h2 id="how-title">Cómo funciona</h2>
+    <ol class="how-steps">
+      <li><strong>Sube tu audio</strong><span>MP3, WAV, FLAC y otros formatos.</span></li>
+      <li><strong>Elige qué hacer</strong><span>Separar voz y música, separar instrumentos o limpiar ruido.</span></li>
+      <li><strong>Escucha y descarga</strong><span>Ajusta el volumen de cada pista y descarga las que quieras.</span></li>
+    </ol>
+    <div class="wall-actions"><button type="button" class="primary-button" data-cerrar>Entendido</button></div>
+  </dialog>
 </body>
 </html>

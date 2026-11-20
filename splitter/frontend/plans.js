@@ -241,3 +241,17 @@
   document.addEventListener('visibilitychange', sincronizar);
   reduced.addEventListener('change', () => { if (reduced.matches) estaticoYa('reduced-motion'); });
 })();
+
+// "Cómo funciona" abre una ventana que explica los pasos
+(() => {
+  const howDialog = document.getElementById('how-dialog');
+  if (!howDialog) return;
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('a[href="#como-funciona"]')) return;
+    event.preventDefault();
+    howDialog.showModal();
+  });
+  howDialog.addEventListener('click', (event) => {
+    if (event.target === howDialog || event.target.closest('[data-cerrar]')) howDialog.close();
+  });
+})();

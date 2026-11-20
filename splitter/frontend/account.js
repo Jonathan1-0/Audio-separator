@@ -489,7 +489,9 @@
     $('menu-profile').addEventListener('click', () => { window.abrirPerfil?.(); });
     $('menu-audios').addEventListener('click', () => { misAudios(); });
     $('menu-cancel').addEventListener('click', () => { cancelarPro(); });
-    $('menu-logout').addEventListener('click', () => { cerrarSesion(); });
+    $('menu-logout').addEventListener('click', () => {
+      avisar('¿Cerrar sesión?', 'Tendrás que volver a iniciar sesión para usar tu cuenta.', { confirmar: 'Cerrar sesión', onConfirm: cerrarSesion });
+    });
     $('menu-verificar')?.addEventListener('click', async () => {
       try {
         const res = await api('/auth/verificar/reenviar', { method: 'POST' });

@@ -38,7 +38,7 @@ html { scroll-padding-top: 88px; scroll-behavior: smooth; }
 html.is-restoring #splitter-form { display: none !important; }
 html[data-restore="results"] #results-panel[hidden], html[data-restore="job"] #job-panel[hidden] { display: block !important; }
 /* En la descarga solo queda el recuadro de resultados: sin la portada de arriba */
-html:is([data-vista="results"], [data-restore="results"]) .intro { display: none; }
+html:is([data-vista="results"], [data-restore="results"], [data-vista="job"], [data-restore="job"]) .intro { display: none; }
 /* Pista dibujada antes de tener datos (al recargar): la pastilla al final, como un volumen al 100%. */
 .glass-range-ghost .glass-range-thumb { left: auto; right: 0; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.5 var(--font-body); letter-spacing: 0; word-spacing: normal; -webkit-font-smoothing: antialiased; }
@@ -115,6 +115,7 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .mode-step, .tracks-step { position: relative; }
 /* Luz fria diagonal sobre las tarjetas: el vidrio la refracta leyendo light.svg y la caja de .light. */
 .light { position: absolute; top: 0; right: -40px; left: -40px; height: 1600px; max-height: 100%; z-index: -1; pointer-events: none; background: url("light.svg?v=esquina1") center / 100% 100% no-repeat; will-change: transform; animation: light-drift 10s ease-in-out infinite alternate; }
+html:is([data-vista="results"], [data-restore="results"], [data-vista="job"], [data-restore="job"]) .light { display: none; }   /* en "Separando" y "Escucha y descarga" solo queda el humo */
 @keyframes light-drift { from { transform: translate3d(-34px, -6px, 0); } to { transform: translate3d(34px, 6px, 0); } }
 .intro { padding: var(--section-space) max(24px, calc((100% - 1216px) / 2)); scroll-margin-top: 88px; }
 /* Un solo bloque compacto bajo el hero: las tres secciones (.step) comparten una rejilla con separaciones chicas. */
@@ -130,7 +131,8 @@ button:focus-visible, a:focus-visible, label:not(.field):has(input:focus-visible
 .upload-step .step-heading, .tracks-step .step-heading { margin: 0 auto clamp(28px, 3.5vw, 44px); }
 .upload-step .eyebrow, .tracks-step .eyebrow { margin-bottom: 20px; }
 .upload-step h2, .tracks-step h2 { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
-.intro { position: relative; isolation: isolate; text-align: center; padding-bottom: calc(clamp(60px, 8vh, 110px) + clamp(56px, 7vw, 96px)); }
+.intro { position: relative; isolation: isolate; text-align: center; padding-bottom: calc(clamp(60px, 8vh, 110px) + clamp(40px, 6vh, 72px) + clamp(56px, 7vw, 96px)); }
+.intro { min-height: calc(100svh - 72px); display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box; }
 .eyebrow { margin: 0 0 12px; color: var(--text-2); font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
 .step-number { margin-right: 10px; font-variant-numeric: tabular-nums; }
 h1, h2 { margin: 0; font-weight: 600; text-wrap: balance; }
@@ -140,7 +142,7 @@ h2 { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter-spacing: -.015
 .hero-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 24px; margin-top: 32px; }
 .text-link { color: var(--accent); font-size: 18px; }
 .text-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-.wave-canvas { position: absolute; inset: auto 0 0; z-index: -1; display: block; width: 100%; height: clamp(60px, 8vh, 110px); pointer-events: none; }
+.wave-canvas { position: absolute; inset: auto 0 clamp(40px, 6vh, 72px); z-index: -1; display: block; width: 100%; height: clamp(60px, 8vh, 110px); pointer-events: none; }
 .stem-group { display: flex; align-items: center; gap: clamp(3px, .55vw, 8px); flex: 1; height: 100%; min-width: 0; }
 .wave-bar { display: block; flex: 1; min-width: 0; height: var(--bar-height); background: var(--text); border-radius: 999px; }
 .studio-flow { margin: 0; }
@@ -281,7 +283,6 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 .plans-bg canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity 400ms var(--ease); }
 .plans-bg.is-ready canvas { opacity: .7; }
 .plans-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, var(--bg), color-mix(in srgb, var(--bg) 62%, transparent) 22%, color-mix(in srgb, var(--bg) 62%, transparent) 78%, var(--bg)); }
-.plans-mark { position: absolute; z-index: -1; left: 50%; top: 50%; width: min(78vw, 720px); height: auto; fill: var(--text); opacity: .035; transform: translate(-50%, -50%); pointer-events: none; }
 .plans-inner { position: relative; }
 .plans h2, .plans-title { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
 .plans .eyebrow { margin-bottom: 20px; }
@@ -610,3 +611,14 @@ html.restore-in :is(#results-panel, #job-panel) { animation: panel-in 400ms var(
 /* Planes: mismo encabezado que el inicio (marca a la izquierda, enlaces a la derecha). */
 .plans-header { display: block; padding: 0; border-bottom: 1px solid var(--line); }
 .plans-header .brand { grid-column: auto; }
+
+/* Aparición al deslizar (solo la página principal, la primera vez) */
+.reveal:not(.is-revealed) { opacity: 0; }
+.reveal.is-revealed { animation: reveal-in .9s cubic-bezier(.16, 1, .3, 1) var(--reveal-delay, 0ms) backwards; }
+@keyframes reveal-in { from { opacity: 0; translate: 0 28px; filter: blur(4px); } to { opacity: 1; translate: 0 0; filter: blur(0); } }
+@media (prefers-reduced-motion: reduce) { .reveal:not(.is-revealed) { opacity: 1; } .reveal.is-revealed { animation: none; } }
+
+/* "Separando tu audio": el recuadro queda centrado en la pantalla, con su contenido centrado */
+html:is([data-vista="job"], [data-restore="job"]) .flow-block { min-height: calc(100svh - 72px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; padding-top: 32px; padding-bottom: 32px; }
+html:is([data-vista="job"], [data-restore="job"]) #job-panel { width: 100%; max-width: 640px; margin: 0 auto; padding: clamp(28px, 4vw, 44px); text-align: center; }
+html:is([data-vista="job"], [data-restore="job"]) #job-panel .progress { margin-inline: auto; }

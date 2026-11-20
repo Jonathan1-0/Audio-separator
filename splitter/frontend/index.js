@@ -688,11 +688,10 @@
     if (currentJob) follow(job.id);
   });
 
-  // "Cómo funciona" lleva a los pasos; si están ocultos (en proceso o en resultados) se explican en una ventana
+  // "Cómo funciona" abre una ventana que explica los pasos
   const howDialog = $('how-dialog');
   document.addEventListener('click', (event) => {
-    const enlace = event.target.closest('a[href="#upload-section"]');
-    if (!enlace || form.getClientRects().length) return;   // el formulario se ve: el enlace funciona normal
+    if (!event.target.closest('a[href="#como-funciona"]')) return;
     event.preventDefault();
     howDialog.showModal();
   });
@@ -1144,7 +1143,18 @@
   });
 
   // Al iniciar o cerrar sesion, o al cambiar de plan, cambian los limites que se muestran.
-  window.onSesion?.(() => { renderQuality(); renderRequirements(); });
+  // Al cerrar sesion estando en un trabajo o en "Escucha y descarga", se vuelve al inicio.
+  let habiaSesion = !!window.getSesion?.();
+  window.onSesion?.(() => {
+    renderQuality();
+    renderRequirements();
+    const haySesion = !!window.getSesion?.();
+    if (habiaSesion && !haySesion && document.documentElement.dataset.vista !== 'form') {
+      salirSinBorrar();
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    habiaSesion = haySesion;
+  });
   renderRequirements();
   updateAction();
   syncMode();
