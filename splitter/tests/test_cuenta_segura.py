@@ -74,6 +74,8 @@ def test_pro_cancelado_pasa_a_gratis_al_vencer(cliente, buzon):
         from app.repositories import suscripciones as repo_suscripciones
         usuario = repo_usuarios.buscar_por_email(db, email)
         activa = repo_suscripciones.buscar_activa(db, usuario.id)
+        # El periodo entero queda en el pasado (la base exige que el fin sea después del inicio)
+        activa.inicio_periodo = ahora_utc() - timedelta(days=31)
         activa.fin_periodo = ahora_utc() - timedelta(minutes=1)
         db.commit()
     assert cliente.get("/suscripcion", headers=cab).json()["plan"] == "gratis"

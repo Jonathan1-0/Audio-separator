@@ -28,13 +28,29 @@ def migrar(motor=db_engine, hasta: str = "head") -> None:
     ajustes = Config(str(config.BASE_DIR / "alembic.ini"))
     ajustes.set_main_option("script_location", str(config.BASE_DIR / "migraciones"))
     tablas = set(inspect(motor).get_table_names())
-    with motor.begin() as conexion:
-        ajustes.attributes["conexion"] = conexion
-        if "alembic_version" not in tablas and "usuarios" in tablas:
-            # Base creada antes de usar Alembic: ya tiene las tablas iniciales
-            log.info("Base sin historial de migraciones: se marca como 0001")
-            command.stamp(ajustes, "0001")
-        command.upgrade(ajustes, hasta)
+    sqlite = motor.dialect.name == "sqlite"
+    with motor.connect() as conexion:
+        if sqlite:
+            # Para cambiar una tabla, SQLite la copia y borra la vieja; con las llaves foráneas
+            # activas eso falla. Solo se pueden apagar fuera de una transacción.
+            conexion.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            conexion.commit()
+        try:
+            with conexion.begin():
+                ajustes.attributes["conexion"] = conexion
+                if "alembic_version" not in tablas and "usuarios" in tablas:
+                    # Base creada antes de usar Alembic: ya tiene las tablas iniciales
+                    log.info("Base sin historial de migraciones: se marca como 0001")
+                    command.stamp(ajustes, "0001")
+                command.upgrade(ajustes, hasta)
+                if sqlite:
+                    rotas = conexion.exec_driver_sql("PRAGMA foreign_key_check").all()
+                    if rotas:
+                        raise RuntimeError(f"Las migraciones dejaron llaves foráneas rotas: {rotas[:5]}")
+        finally:
+            if sqlite:
+                conexion.exec_driver_sql("PRAGMA foreign_keys=ON")
+                conexion.commit()
 
 
 def _preparar_planes() -> None:

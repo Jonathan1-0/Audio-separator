@@ -18,7 +18,13 @@ def _argumentos_conexion() -> dict:
     if ES_SQLITE:
         return {"check_same_thread": False}
     ruta_ca = os.getenv("DB_SSL_CA")
-    return {"ssl": {"ca": str(config.BASE_DIR / ruta_ca)}} if ruta_ca else {}
+    if not ruta_ca:
+        return {}
+    ca = str(config.BASE_DIR / ruta_ca)
+    if DATABASE_URL.startswith("postgresql"):
+        # psycopg: exige TLS y revisa que el certificado sea del servidor (el ca.pem de Aiven)
+        return {"sslmode": "verify-full", "sslrootcert": ca}
+    return {"ssl": {"ca": ca}}  # pymysql
 
 
 db_engine = create_engine(

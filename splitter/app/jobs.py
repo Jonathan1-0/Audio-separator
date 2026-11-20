@@ -80,7 +80,7 @@ def _job_desde_fila(fila: Trabajo) -> Optional[Job]:
         usuario_id=fila.usuario_id,
         original_name=fila.nombre_original,
         preset=fila.preset,
-        wanted_stems=fila.pistas_pedidas.split(","),
+        wanted_stems=[p.stem for p in fila.pistas],
         input_path=carpeta / "input",
         out_dir=carpeta / "out",
         size_bytes=fila.tamano_bytes,

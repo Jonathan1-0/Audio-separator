@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .. import config
 from ..database import SessionLocal
-from ..models.tablas import Resultado, Trabajo, Usuario
+from ..models.tablas import Trabajo, Usuario
 from ..repositories import usuarios as repo_usuarios
 from . import auth, correo, verificacion
 
@@ -176,7 +176,6 @@ def borrar_cuenta(usuario_id: int, password: str, confirmacion: str, borrar_trab
 
     with SessionLocal() as db:
         if ids:
-            db.execute(delete(Resultado).where(Resultado.trabajo_id.in_(ids)))
             db.execute(delete(Trabajo).where(Trabajo.id.in_(ids)))
         repo_usuarios.borrar_sesiones_de(db, usuario_id)
         usuario = repo_usuarios.buscar_por_id(db, usuario_id)

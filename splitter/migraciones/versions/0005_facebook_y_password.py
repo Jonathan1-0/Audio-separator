@@ -17,7 +17,7 @@ def upgrade() -> None:
     op.create_index("ix_usuarios_facebook_id", "usuarios", ["facebook_id"], unique=True)
     op.add_column("usuarios", sa.Column("tiene_password", sa.Boolean, nullable=False, server_default=sa.true()))
     # Las cuentas creadas con Google o Facebook tienen una contraseña al azar que nadie conoce
-    op.execute("UPDATE usuarios SET tiene_password = 0 WHERE proveedor IN ('google', 'facebook')")
+    op.execute("UPDATE usuarios SET tiene_password = false WHERE proveedor IN ('google', 'facebook')")
 
 
 def downgrade() -> None:

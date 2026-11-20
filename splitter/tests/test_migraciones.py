@@ -3,10 +3,15 @@ de Alembic (como la de producción) se actualiza sin perder datos."""
 import tempfile
 from pathlib import Path
 
+import pytest
+from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
+from app import config
 from app.database import Base
 from app.seed import migrar
 
@@ -39,7 +44,7 @@ def test_base_de_antes_de_alembic_se_actualiza():
         fila = c.execute(text("SELECT email, proveedor, email_verificado, totp_activo FROM usuarios")).one()
         version = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
     assert tuple(fila) == ("viejo@ejemplo.com", "email", 0, 0)
-    assert version == "0006"
+    assert version == "0007"
 
 
 def test_con_las_columnas_de_perfil_ya_puestas():
@@ -83,3 +88,68 @@ def test_cuentas_de_google_quedan_sin_contrasena_propia():
     with motor.connect() as c:
         filas = dict(c.execute(text("SELECT proveedor, tiene_password FROM usuarios")).all())
     assert filas == {"email": 1, "google": 0, "facebook": 0}
+
+
+def _base_0006_con_trabajo():
+    """Base en 0006 con un usuario, una sesión y un trabajo con dos pistas y un resultado."""
+    motor = _motor()
+    migrar(motor, "0006")
+    with motor.begin() as c:
+        c.execute(text("INSERT INTO usuarios (id, email, nombre, password_hash, estado, creado_en, proveedor) "
+                       "VALUES (1, 'a@ejemplo.com', 'A', 'x', 'activo', '2026-01-01', 'email')"))
+        c.execute(text("INSERT INTO sesiones (usuario_id, token, expira_en, creado_en) VALUES (1, 't', '2027-01-01', '2026-01-01')"))
+        c.execute(text("INSERT INTO trabajos (id, usuario_id, nombre_original, tamano_bytes, preset, pistas_pedidas, "
+                       "estado, progreso, creado_en) VALUES ('t1', 1, 'x.mp3', 10, '4stem', 'drums,vocals', "
+                       "'completado', 100, '2026-01-01')"))
+        c.execute(text("INSERT INTO resultados (trabajo_id, stem, ruta_archivo, expira_en) VALUES ('t1', 'drums', '/x', '2027-01-01')"))
+    return motor
+
+
+def test_pistas_pasan_a_su_tabla():
+    motor = _base_0006_con_trabajo()
+    migrar(motor)
+    with motor.connect() as c:
+        assert c.execute(text("SELECT stem FROM trabajo_pistas WHERE trabajo_id = 't1' ORDER BY orden")).scalars().all() == ["drums", "vocals"]
+        assert c.execute(text("SELECT count(*) FROM resultados")).scalar() == 1
+        assert c.execute(text("SELECT count(*) FROM sesiones")).scalar() == 1
+    assert "pistas_pedidas" not in {c["name"] for c in inspect(motor).get_columns("trabajos")}
+
+
+def test_checks_rechazan_valores_inventados():
+    motor = _base_0006_con_trabajo()
+    migrar(motor)
+    for sql in (
+        "UPDATE usuarios SET estado = 'zombi'",
+        "UPDATE trabajos SET progreso = 150",
+        "UPDATE trabajos SET preset = '9stem'",
+        "INSERT INTO planes (nombre, precio_mensual, trabajos_por_mes, minutos_max_audio, mejor_calidad) VALUES ('x', -1, 0, 5, 0)",
+    ):
+        with pytest.raises(IntegrityError), motor.begin() as c:
+            c.execute(text(sql))
+
+
+def test_borrar_trabajo_y_usuario_en_cascada():
+    motor = _base_0006_con_trabajo()
+    migrar(motor)
+    with motor.begin() as c:
+        c.execute(text("PRAGMA foreign_keys=ON"))
+        c.execute(text("DELETE FROM usuarios WHERE id = 1"))
+    with motor.connect() as c:
+        for tabla in ("sesiones", "trabajos", "trabajo_pistas", "resultados"):
+            assert c.execute(text(f"SELECT count(*) FROM {tabla}")).scalar() == 0, tabla
+
+
+def test_0007_se_puede_deshacer():
+    motor = _base_0006_con_trabajo()
+    migrar(motor)
+    ajustes = Config(str(config.BASE_DIR / "alembic.ini"))
+    ajustes.set_main_option("script_location", str(config.BASE_DIR / "migraciones"))
+    with motor.connect() as conexion:
+        conexion.exec_driver_sql("PRAGMA foreign_keys=OFF")  # igual que migrar()
+        conexion.commit()
+        with conexion.begin():
+            ajustes.attributes["conexion"] = conexion
+            command.downgrade(ajustes, "0006")
+    with motor.connect() as c:
+        assert c.execute(text("SELECT pistas_pedidas FROM trabajos")).scalar() == "drums,vocals"
+    assert "trabajo_pistas" not in inspect(motor).get_table_names()

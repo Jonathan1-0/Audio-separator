@@ -12,8 +12,9 @@ _TMP = Path(tempfile.mkdtemp(prefix="splitter_pruebas_"))
 # Se ponen antes de importar la app
 os.environ["SPLITTER_ENGINE"] = "fake"
 os.environ["SPLITTER_DATA_DIR"] = str(_TMP / "data")
-os.environ["DATABASE_URL"] = f"sqlite:///{_TMP / 'pruebas.db'}"
-os.environ.pop("DB_SSL_CA", None)
+# SQLite por defecto; SPLITTER_TEST_DATABASE_URL corre las pruebas en otra base (vacía, se llena aquí)
+os.environ["DATABASE_URL"] = os.getenv("SPLITTER_TEST_DATABASE_URL") or f"sqlite:///{_TMP / 'pruebas.db'}"
+os.environ["DB_SSL_CA"] = ""  # vacía, no borrada: si no, load_dotenv la toma de .env
 # Las pruebas crean muchas cuentas desde la misma IP; los límites se prueban aparte
 for _limite in ("LOGIN_POR_IP", "LOGIN_FALLOS_POR_CUENTA", "REGISTROS_POR_IP", "CORREOS_POR_CUENTA"):
     os.environ[f"SPLITTER_{_limite}"] = "100000"

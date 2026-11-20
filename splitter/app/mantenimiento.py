@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 
 from . import config
 from .database import SessionLocal, ahora_utc
-from .models.tablas import Resultado, Sesion, Suscripcion, Trabajo, Usuario
+from .models.tablas import Sesion, Suscripcion, Trabajo, Usuario
 
 log = logging.getLogger("splitter.mantenimiento")
 
@@ -26,7 +26,6 @@ def limpiar_base() -> dict:
             select(Trabajo.id).where(Trabajo.creado_en < limite, Trabajo.estado.in_(("completado", "error"))).limit(5000)
         ))
         if viejos:
-            db.execute(delete(Resultado).where(Resultado.trabajo_id.in_(viejos)))
             db.execute(delete(Trabajo).where(Trabajo.id.in_(viejos)))
         # Registros que nunca se confirmaron con el código del correo
         sin_confirmar = list(db.scalars(
