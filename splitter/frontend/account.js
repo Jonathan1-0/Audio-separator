@@ -252,6 +252,12 @@
   const nombrePistas = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => x.trim()).filter(Boolean)
     .map((x) => NOMBRE_PISTA[x] || x).join(', ');
   let audios = null;
+  const MAX_NOMBRE = 40;
+  function nombreCorto(nombre, formato) {
+    if (nombre.length <= MAX_NOMBRE) return nombre;
+    return `${nombre.slice(0, MAX_NOMBRE - 6).trimEnd()}…${formato ? `.${formato}` : ''}`;
+  }
+
   async function misAudios() {
     if (!sesion) { location.href = 'planes.html'; return; }   // "Mis audios" es de cualquier cuenta; sin cuenta no hay audios
     if (!audios) {
@@ -292,7 +298,9 @@
       const texto = document.createElement('div');
       texto.className = 'history-info';
       const nombre = document.createElement('strong');
-      nombre.textContent = t.nombre_original;
+      // Nombres largos: se cortan con «…» y se deja ver el formato (p. ej. «Canción muy larg….wav»)
+      nombre.textContent = nombreCorto(t.nombre_original, t.formato);
+      nombre.title = t.formato ? `${t.nombre_original}.${t.formato}` : t.nombre_original;
       const etiquetas = document.createElement('span');
       etiquetas.className = 'history-tags';
       const tags = [...(PRESET_ETIQUETAS[t.preset] || [t.preset]), t.duracion_audio_seg != null ? minSeg(t.duracion_audio_seg) : ''].filter(Boolean);

@@ -465,6 +465,7 @@ label.profile-field:has(input:focus-visible) { outline: none; }
 .glass-range-seek.is-playing:not(.is-active) :is(.glass-range-thumb, .glass-range-fill) { transition: transform 250ms linear; }
 .glass-range-seek.is-playing:not(.is-active)::before { transition: width 250ms linear; }
 .track-row strong { font-size: 17px; font-weight: 500; }
+.track-solo { visibility: hidden; pointer-events: none; }
 .track-vol { color: var(--text-2); font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
 /* Silenciar una pista: el volumen elegido se conserva y se ve atenuado */
 .track-mute { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text); cursor: pointer; transition: background-color 150ms var(--ease), color 150ms var(--ease); }

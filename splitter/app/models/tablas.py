@@ -95,6 +95,7 @@ class Trabajo(Base):
     id = Column(String(32), primary_key=True)  # el mismo id que genera jobs.py
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     nombre_original = Column(String(255), nullable=False)
+    formato = Column(String(10))  # extensión del archivo subido: mp3, wav...
     tamano_bytes = Column(BigInteger, nullable=False)
     preset = Column(String(20), nullable=False)  # 2stem | 4stem | 4stem_fast | denoise
     pistas_pedidas = Column(String(255), nullable=False)  # por ejemplo "vocals,drums"

@@ -90,6 +90,23 @@ def convert(src: Path, fmt: str, *, preview: bool = False) -> Path:
     return dst
 
 
+def restar(original: Path, quitar: Path, dst: Path) -> Path:
+    """Guarda en dst el original menos la pista `quitar` (lo que el modelo quitó), en WAV estéreo de 44.1 kHz."""
+    if not ffmpeg_available():
+        raise RuntimeError("ffmpeg no está instalado en el servidor.")
+    fmt = "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo"
+    filtro = f"[0:a]{fmt}[o];[1:a]{fmt}[q];[o][q]amerge=inputs=2,pan=stereo|c0=c0-c2|c1=c1-c3[out]"
+    tmp = _tmp_path(dst)
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(original), "-i", str(quitar),
+           "-filter_complex", filtro, "-map", "[out]", "-c:a", "pcm_s16le", "-f", "wav", str(tmp)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(f"ffmpeg falló: {proc.stderr.strip()[:200]}")
+    _publish(tmp, dst)
+    return dst
+
+
 def build_zip(stems: Dict[str, Path], fmt: str, base_name: str, dest_dir: Path) -> Path:
     zip_path = dest_dir / f"all.{fmt}.zip"
     if zip_path.exists():
@@ -98,6 +115,8 @@ def build_zip(stems: Dict[str, Path], fmt: str, base_name: str, dest_dir: Path) 
     try:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:
             for stem, wav in stems.items():
+                if stem in config.SOLO_ESCUCHA:
+                    continue
                 out = convert(wav, fmt)
                 zf.write(out, arcname=f"{base_name} - {stem}.{fmt}")
     except BaseException:

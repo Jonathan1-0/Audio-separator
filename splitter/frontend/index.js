@@ -9,7 +9,7 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
   // Etiquetas en espanol; los ids viajan en ingles al backend.
-  const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', guitar: 'Guitarra', piano: 'Piano', other: 'Otros instrumentos', voice: 'Voz' };
+  const STEM_LABELS = { vocals: 'Voz', instrumental: 'Música sin voz', drums: 'Batería', bass: 'Bajo', guitar: 'Guitarra', piano: 'Piano', other: 'Otros instrumentos', voice: 'Voz', noise: 'Ruido' };
   const stemLabel = (id) => STEM_LABELS[id] || id;
   // Pistas elegibles por modo (clean tiene una sola pista: no hay nada que elegir).
   // Solo "Separar instrumentos" deja elegir pistas; los otros modos entregan todo
@@ -809,6 +809,7 @@
       track.source = actx.createMediaElementSource(track.audio);
       track.gain = actx.createGain();
       track.gain.gain.value = volumenReal(track);
+      track.audio.volume = 1;   // desde aqui el volumen lo pone la ganancia; si el elemento quedo en 0, no sonaria
       track.source.connect(track.gain).connect(actx.destination);
     }
     if (actx.state === 'suspended') actx.resume();
@@ -817,7 +818,7 @@
   // Volumen que suena: 0 si la pista esta silenciada (el deslizador conserva su valor).
   const volumenReal = (track) => (track.muted ? 0 : track.volume);
   function aplicarVolumen(track) {
-    if (track.gain) track.gain.gain.value = volumenReal(track);
+    if (track.gain) { track.gain.gain.value = volumenReal(track); track.audio.volume = 1; }
     else track.audio.volume = volumenReal(track);
   }
   function setVolume(track, value) {
@@ -915,11 +916,18 @@
     const percent = document.createElement('span');
     percent.className = 'track-vol';
     percent.textContent = '100%';
+    // Las pistas de solo escucha (el ruido que se quitó) no se descargan: solo sirven para comparar
+    const soloEscucha = !!stem.solo_escucha;
+    // (en su lugar va un hueco invisible del mismo ancho que «Descargar», para que las barras queden alineadas)
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'secondary-button';
     button.textContent = 'Descargar';
-    button.setAttribute('aria-label', `Descargar ${name}`);
+    if (soloEscucha) {
+      button.classList.add('track-solo');
+      button.tabIndex = -1;
+      button.setAttribute('aria-hidden', 'true');
+    } else button.setAttribute('aria-label', `Descargar ${name}`);
     // Silenciar la pista sin perder el volumen elegido
     const mute = document.createElement('button');
     mute.type = 'button';
@@ -934,7 +942,9 @@
     audio.src = stem.preview_url;
     const track = { audio, volume: 1, muted: false, gain: null, source: null };
     // Para «Restablecer volumen»: vuelve al 100 % y quita el silencio.
-    track.reset = () => { if (track.muted) mute.click(); range.value = '100'; range.dispatchEvent(new Event('input', { bubbles: true })); };
+    // La de solo escucha (el ruido) empieza y se restablece en 0 %: se sube para comparar.
+    const volumenInicial = soloEscucha ? '0' : '100';
+    track.reset = () => { if (track.muted) mute.click(); range.value = volumenInicial; range.dispatchEvent(new Event('input', { bubbles: true })); };
     mute.addEventListener('click', () => {
       track.muted = !track.muted;
       aplicarVolumen(track);
@@ -944,10 +954,12 @@
       mute.setAttribute('aria-label', `${track.muted ? 'Activar sonido de' : 'Silenciar'} ${name}`);
     });
     range.addEventListener('input', () => {
+      if (track.muted && range.value > 0) mute.click();   // mover la barra quita el silencio
       setVolume(track, range.value / 100);
       percent.textContent = `${range.value}%`;
     });
-    button.addEventListener('click', () => prepareDownload(button, stem.download_url));
+    if (!soloEscucha) button.addEventListener('click', () => prepareDownload(button, stem.download_url));
+    else track.reset();   // empieza en 0 %
     // Si una pista se queda sin datos a media reproduccion, todas esperan y vuelven a arrancar juntas.
     audio.addEventListener('waiting', () => { if (playing && !ajustando) arrancarJuntas(tracks[0].audio.currentTime); });
     tracks.push(track);
@@ -1017,7 +1029,7 @@
       if (tracks === mine) $('player-status').textContent = 'No se pudo cargar la vista previa. Puedes descargar las pistas igual.';
       return false;
     });
-    $('download-all').hidden = job.stems.length < 2;
+    $('download-all').hidden = job.stems.filter((stem) => !stem.solo_escucha).length < 2;
     $('expires').textContent = expiresText(job);
     showView('results');
   }

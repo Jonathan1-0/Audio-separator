@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from . import config
+from . import config, media
 from .database import SessionLocal, ahora_utc
 from .engine import gpu_seconds_del_hilo
 from .models.tablas import Trabajo
@@ -142,6 +142,7 @@ class JobManager:
                 id=job.id,
                 usuario_id=job.usuario_id,
                 nombre_original=job.original_name,
+                formato=job.input_path.suffix.lstrip(".").lower()[:10] or None,
                 tamano_bytes=job.size_bytes,
                 preset=job.preset,
                 pistas_pedidas=",".join(job.wanted_stems),
@@ -249,6 +250,14 @@ class JobManager:
             for s, p in files.items():
                 if s not in keep:
                     p.unlink(missing_ok=True)
+            comparar = config.PRESETS[job.preset].get("pista_comparar")
+            if comparar and comparar["de"] in keep:
+                try:
+                    keep[comparar["stem"]] = media.restar(
+                        job.input_path, keep[comparar["de"]], job.out_dir / f"{comparar['stem']}.wav"
+                    )
+                except Exception:   # sin la pista de comparar el trabajo sigue sirviendo
+                    log.exception("No se pudo crear la pista %s de %s", comparar["stem"], job.id)
             job.stem_files = keep
             job.expires_at = self._vencimiento(job)
             job.status, job.progress, job.message = DONE, 1.0, MENSAJES[DONE]

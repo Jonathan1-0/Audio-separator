@@ -135,6 +135,12 @@ def _public(job: Job) -> dict:
                 "preview_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/stems/{stem}/preview"),
                 "download_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/stems/{stem}/download"),
             }
+            if stem not in config.SOLO_ESCUCHA
+            else {
+                "name": stem,
+                "preview_url": enlaces.firmar(job.id, f"/api/jobs/{job.id}/stems/{stem}/preview"),
+                "solo_escucha": True,
+            }
             for stem in job.stem_files
         ]
         data["download_all_url"] = enlaces.firmar(job.id, f"/api/jobs/{job.id}/download")
@@ -365,6 +371,8 @@ async def stem_download(
     firma: str = "",
     usuario: Optional[Usuario] = Depends(usuario_opcional),
 ):
+    if stem in config.SOLO_ESCUCHA:
+        raise HTTPException(403, "Esta pista solo se puede escuchar.")
     job = await run_in_threadpool(_job_para_archivo, job_id, firma, usuario)
     fmt = _check_format(format)
     path = _stem_path(job, stem)

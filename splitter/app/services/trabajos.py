@@ -28,6 +28,7 @@ def historial(usuario_id: int) -> List[dict]:
             {
                 "id": t.id,
                 "nombre_original": t.nombre_original,
+                "formato": t.formato,
                 "preset": t.preset,
                 "pistas_pedidas": t.pistas_pedidas,
                 "estado": t.estado,
@@ -46,6 +47,7 @@ def historial(usuario_id: int) -> List[dict]:
                         "download_url": enlaces.firmar(t.id, f"/api/jobs/{t.id}/stems/{r.stem}/download"),
                     }
                     for r in t.resultados
+                    if r.stem not in config.SOLO_ESCUCHA
                 ],
             }
             for t in trabajos

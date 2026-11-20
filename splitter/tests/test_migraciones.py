@@ -39,7 +39,7 @@ def test_base_de_antes_de_alembic_se_actualiza():
         fila = c.execute(text("SELECT email, proveedor, email_verificado, totp_activo FROM usuarios")).one()
         version = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
     assert tuple(fila) == ("viejo@ejemplo.com", "email", 0, 0)
-    assert version == "0005"
+    assert version == "0006"
 
 
 def test_con_las_columnas_de_perfil_ya_puestas():

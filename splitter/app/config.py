@@ -135,6 +135,8 @@ PRESETS = {
     "denoise": {
         "label": "Limpiar ruido: deja solo la voz (quita música y ruido de fondo)",
         "stems": ["voice"],
+        # Pista extra para comparar: el original menos la voz limpia. Solo se escucha, no se descarga.
+        "pista_comparar": {"stem": "noise", "de": "voice"},
         # Primero se separa la voz y después se limpia
         "steps": [
             {
@@ -151,6 +153,8 @@ PRESETS = {
     },
 }
 DEFAULT_PRESET = "2stem"
+# Pistas que solo se escuchan en la página: no se descargan ni van en el ZIP
+SOLO_ESCUCHA = {"noise"}
 
 # Con 2 tarda la mitad, con un poco menos de calidad
 MDXC_OVERLAP = _int("SPLITTER_MDXC_OVERLAP", 4)
